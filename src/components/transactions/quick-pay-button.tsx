@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Banknote, X } from "lucide-react";
 import { PaymentForm } from "./payment-form";
 import { formatRupiah } from "@/lib/format";
@@ -39,7 +40,7 @@ export function QuickPayButton({
         Bayar
       </button>
 
-      {open && (
+      {open && createPortal(
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-pine/45 p-0 backdrop-blur-sm sm:items-center sm:p-4">
           <button
             type="button"
@@ -97,7 +98,8 @@ export function QuickPayButton({
               />
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

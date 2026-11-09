@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AlertCircle, LoaderCircle, Plus, X } from "lucide-react";
 import { createExpenseAction } from "@/actions/finance";
@@ -40,7 +41,7 @@ export function ExpenseDialog() {
         <Plus size={16} /> Catat pengeluaran
       </button>
 
-      {open && (
+      {open && createPortal(
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-pine/45 backdrop-blur-sm sm:items-center sm:p-4">
           <button type="button" className="absolute inset-0 cursor-default" aria-label="Tutup" onClick={() => setOpen(false)} />
           <div
@@ -137,7 +138,8 @@ export function ExpenseDialog() {
               </button>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

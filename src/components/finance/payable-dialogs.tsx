@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AlertCircle, LoaderCircle, Plus, Store, Wallet, X } from "lucide-react";
 import { createPayableAction, createSupplierAction, recordPayablePaymentAction } from "@/actions/finance";
@@ -42,7 +43,7 @@ function DialogFrame({
 }) {
   useDialog(open, onClose);
   if (!open) return null;
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-pine/45 backdrop-blur-sm sm:items-center sm:p-4">
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Tutup" onClick={onClose} />
       <div
@@ -68,7 +69,8 @@ function DialogFrame({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
