@@ -4,11 +4,11 @@
 
 - Project Vercel: `cundus-projects/management-bengkel`.
 - URL production: `https://management-bengkel-ebon.vercel.app`.
-- `vercel.json` menetapkan Next.js, region Singapore (`sin1`), install dengan lockfile, dan build `pnpm build`. Node.js dipatok ke `22.x` di `package.json`.
+- `vercel.json` menetapkan Next.js, region Singapore (`sin1`), install dengan lockfile, dan build `pnpm db:deploy && pnpm build`. Migrasi database dijalankan sebelum build; jika migrasi gagal, versi baru tidak dirilis. Node.js dipatok ke `22.x` di `package.json`.
 - Environment production memakai database Prisma Postgres yang sudah ada di Singapore, dengan pooled URL (`connection_limit=5`), direct URL untuk migrasi, dan secret session yang sama.
 - Salinan konfigurasi deployment lokal ada di `.env.vercel.local`, diabaikan Git dan tidak di-upload sebagai source. Isi variable production melalui `vercel env add` dengan input stdin.
 - Migrasi dan akun owner sudah tersedia; perpindahan hosting tidak membutuhkan reset atau seed database.
-- Untuk deploy ulang dari checkout yang sudah terhubung: `vercel project inspect --non-interactive`, lalu `vercel deploy --prod --scope cundus-projects`.
+- Deployment dilakukan melalui integrasi Git Vercel dengan push ke `main`. Jangan melakukan deployment langsung melalui CLI kecuali diminta pengguna.
 
 Panduan ini menggunakan **Prisma ORM** dengan PostgreSQL terkelola. Cocok untuk Neon, Vercel Postgres, Supabase, atau PostgreSQL mandiri.
 
@@ -114,7 +114,7 @@ Script ini melakukan upsert akun owner dan setting awal bengkel tanpa menambahka
 2. **Add New Project** di Vercel → import repo.
 3. Framework terdeteksi **Next.js**.
 4. Install command: `pnpm install` (postinstall otomatis `prisma generate`).
-5. Build command: `pnpm build` (sudah termasuk `prisma generate`).
+5. Build command: `pnpm db:deploy && pnpm build` (menerapkan migrasi sebelum build dan `prisma generate`). Pastikan `DIRECT_URL` tersedia pada environment tujuan dan memakai database yang sesuai; Preview sebaiknya memakai database terpisah dari Production.
 6. Tambahkan environment variables di atas untuk **Production** (dan Preview bila perlu).
 7. Deploy.
 
