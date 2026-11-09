@@ -46,6 +46,7 @@ model User {
   expenses        Expense[]        @relation("ExpenseCreator")
   payables        Payable[]        @relation("PayableCreator")
   payablePayments PayablePayment[] @relation("PayablePaymentCreator")
+  purchases       Purchase[]
 
   @@map("users")
 }
@@ -95,6 +96,7 @@ model Item {
   isActive         Boolean           @default(true) @map("is_active")
   createdAt        DateTime          @default(now()) @map("created_at")
   transactionItems TransactionItem[]
+  stockBatches     StockBatch[]
 
   @@index([category])
   @@map("items")
@@ -140,11 +142,35 @@ model TransactionItem {
   unitPrice     Int          @map("unit_price")
   unitCost      Int          @default(0) @map("unit_cost")
   subtotal      Int
+  stockBatchId  Int?         @map("stock_batch_id")
+  stockBatch    StockBatch?  @relation(fields: [stockBatchId], references: [id])
   transaction   Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   item          Item?        @relation(fields: [itemId], references: [id], onDelete: SetNull)
 
   @@index([transactionId])
+  @@index([stockBatchId])
   @@map("transaction_items")
+}
+
+model StockBatch {
+  id               Int               @id @default(autoincrement())
+  itemId           Int               @map("item_id")
+  code             String
+  receivedDate     DateTime          @map("received_date") @db.Date
+  quantity         Int
+  remaining        Int
+  unitCost         Int               @map("unit_cost")
+  notes            String?
+  purchaseId       Int?              @map("purchase_id")
+  purchase         Purchase?         @relation(fields: [purchaseId], references: [id])
+  createdAt        DateTime          @default(now()) @map("created_at")
+  item             Item              @relation(fields: [itemId], references: [id])
+  transactionItems TransactionItem[]
+
+  @@unique([itemId, code])
+  @@index([purchaseId])
+  @@index([itemId, receivedDate, id])
+  @@map("stock_batches")
 }
 
 model Payment {
@@ -186,6 +212,7 @@ model Supplier {
   notes         String?
   createdAt     DateTime  @default(now()) @map("created_at")
   payables      Payable[]
+  purchases     Purchase[]
 
   @@map("suppliers")
 }
@@ -203,9 +230,31 @@ model Payable {
   supplier     Supplier         @relation(fields: [supplierId], references: [id])
   createdBy    User             @relation("PayableCreator", fields: [createdById], references: [id])
   payments     PayablePayment[]
+  purchase     Purchase?
 
   @@index([dueDate])
   @@map("payables")
+}
+
+model Purchase {
+  id           Int          @id @default(autoincrement())
+  requestId    String       @unique @map("request_id") @db.Uuid
+  supplierId   Int          @map("supplier_id")
+  referenceNo  String?      @map("reference_no")
+  businessDate DateTime     @map("business_date") @db.Date
+  total        Int
+  notes        String?
+  payableId    Int          @unique @map("payable_id")
+  createdById  Int          @map("created_by")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  supplier     Supplier     @relation(fields: [supplierId], references: [id])
+  payable      Payable      @relation(fields: [payableId], references: [id])
+  createdBy    User         @relation(fields: [createdById], references: [id])
+  batches      StockBatch[]
+
+  @@unique([supplierId, referenceNo])
+  @@index([businessDate])
+  @@map("purchases")
 }
 
 model PayablePayment {

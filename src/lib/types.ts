@@ -42,6 +42,7 @@ export type Item = {
   cost: number;
   stock: number;
   minStock: number;
+  stockValue?: number;
   isActive: boolean;
   createdAt: string;
 };
@@ -73,6 +74,7 @@ export type TransactionItem = {
   qty: number;
   unitPrice: number;
   unitCost: number;
+  stockBatchCode?: string | null;
   subtotal: number;
 };
 
@@ -119,6 +121,7 @@ export type Supplier = {
 };
 
 export type Payable = {
+  purchaseId?: number | null;
   id: number;
   supplierId: number;
   supplierName: string;

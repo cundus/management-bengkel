@@ -7,6 +7,7 @@ import {
   Landmark,
   LogOut,
   PackageSearch,
+  ShoppingCart,
   Settings2,
   ShieldCheck,
   Smartphone,
@@ -62,6 +63,15 @@ export default async function MorePage({
       stat: `${counts.outstandingTransactions} nota terbuka`,
       color: "bg-warning-soft text-warning",
       show: true,
+    },
+    {
+      href: "/pembelian",
+      label: "Pembelian",
+      description: "Barang masuk, batch stok, dan tagihan supplier",
+      icon: ShoppingCart,
+      stat: "Khusus pemilik",
+      color: "bg-[#eef1e7] text-[#4b6143]",
+      show: isOwner,
     },
     {
       href: "/pengeluaran",

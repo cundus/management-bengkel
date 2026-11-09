@@ -8,6 +8,7 @@ import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/constants";
 import { addDaysISO, isValidISODate, parseDateOnly, todayISO } from "@/lib/dates";
 import { prisma } from "@/lib/db";
 import type { ActionState } from "@/lib/action-state";
+import { consumeStock, lockStockItem } from "@/lib/stock";
 
 export type CreateTransactionInput = {
   customerId: number;
@@ -106,6 +107,19 @@ export async function createTransactionAction(input: CreateTransactionInput): Pr
       // Serialisasi pembuatan nomor nota per bengkel, aman untuk beberapa kasir.
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(225225)::text AS lock`;
 
+      // Split a sparepart line by batch so each quantity retains its exact HPP.
+      const batchLines: (typeof lines[number] & { stockBatchId?: number })[] = [];
+      for (const line of [...lines].sort((a, b) => a.itemId - b.itemId)) {
+        if (line.category !== "sparepart") {
+          batchLines.push(line);
+          continue;
+        }
+        const allocations = await consumeStock(tx, line.itemId, line.qty);
+        for (const allocation of allocations) {
+          batchLines.push({ ...line, ...allocation, subtotal: line.unitPrice * allocation.qty });
+        }
+      }
+
       const count = await tx.transaction.count({ where: { businessDate: parseDateOnly(today) } });
       let sequence = count + 1;
       let invoiceNo = generateInvoiceNumber(today, sequence);
@@ -133,7 +147,7 @@ export async function createTransactionAction(input: CreateTransactionInput): Pr
           status: "selesai",
           createdById: user.id,
           createdAt,
-          items: { create: lines },
+          items: { create: batchLines },
           payments:
             payNow > 0
               ? {
@@ -150,15 +164,6 @@ export async function createTransactionAction(input: CreateTransactionInput): Pr
         },
       });
 
-      for (const line of lines) {
-        if (line.category !== "sparepart") continue;
-        const updated = await tx.item.updateMany({
-          where: { id: line.itemId, stock: { gte: line.qty } },
-          data: { stock: { decrement: line.qty } },
-        });
-        if (updated.count !== 1) throw new Error(`Stok ${line.name} berubah. Muat ulang halaman.`);
-      }
-
       return { id, invoiceNo };
     });
 
@@ -167,6 +172,7 @@ export async function createTransactionAction(input: CreateTransactionInput): Pr
     revalidatePath("/piutang");
     revalidatePath("/laporan");
     revalidatePath("/stok");
+    for (const itemId of idList) revalidatePath(`/stok/${itemId}`);
     revalidatePath("/pelanggan");
 
     return { ok: true, ...result };
@@ -188,30 +194,36 @@ export async function recordPaymentAction(
   const id = String(transactionId ?? "").trim();
   if (!id) return { ok: false, message: "Transaksi tidak valid." };
 
-  const transaction = await prisma.transaction.findUnique({
-    where: { id },
-    include: { payments: { select: { amount: true } } },
-  });
-  if (!transaction) return { ok: false, message: "Transaksi tidak ditemukan." };
-  if (transaction.status === "batal") return { ok: false, message: "Transaksi yang dibatalkan tidak bisa dibayar." };
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM transactions WHERE id = ${id} FOR UPDATE`;
+    const transaction = await tx.transaction.findUnique({
+      where: { id },
+      include: { payments: { select: { amount: true } } },
+    });
+    if (!transaction) return { ok: false, message: "Transaksi tidak ditemukan." };
+    if (transaction.status === "batal") return { ok: false, message: "Transaksi yang dibatalkan tidak bisa dibayar." };
 
-  const paid = transaction.payments.reduce((sum, payment) => sum + payment.amount, 0);
-  const nominal = Math.floor(Number(amount));
-  const check = canAcceptPayment(transaction.total, paid, nominal);
-  if (!check.ok) return { ok: false, message: check.message ?? "Nominal tidak valid." };
-  if (!isPaymentMethod(method)) return { ok: false, message: "Metode pembayaran tidak valid." };
+    const paid = transaction.payments.reduce((sum, payment) => sum + payment.amount, 0);
+    const nominal = Math.floor(Number(amount));
+    const check = canAcceptPayment(transaction.total, paid, nominal);
+    if (!check.ok) return { ok: false, message: check.message ?? "Nominal tidak valid." };
+    if (!isPaymentMethod(method)) return { ok: false, message: "Metode pembayaran tidak valid." };
 
-  await prisma.payment.create({
-    data: {
-      transactionId: id,
-      amount: nominal,
-      method,
-      notes: notes?.trim().slice(0, 300) || null,
-      businessDate: parseDateOnly(todayISO()),
-      paidAt: new Date(),
-      receivedById: user.id,
-    },
+    await tx.payment.create({
+      data: {
+        transactionId: id,
+        amount: nominal,
+        method,
+        notes: notes?.trim().slice(0, 300) || null,
+        businessDate: parseDateOnly(todayISO()),
+        paidAt: new Date(),
+        receivedById: user.id,
+      },
+    });
+
+    return { ok: true, message: "Pembayaran berhasil dicatat." };
   });
+  if (!result.ok) return result;
 
   revalidatePath("/");
   revalidatePath("/transaksi");
@@ -220,7 +232,7 @@ export async function recordPaymentAction(
   revalidatePath("/laporan");
   revalidatePath("/pelanggan");
 
-  return { ok: true, message: "Pembayaran berhasil dicatat." };
+  return result;
 }
 
 export async function voidTransactionAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -233,7 +245,7 @@ export async function voidTransactionAction(_prev: ActionState, formData: FormDa
     where: { id },
     include: {
       payments: { select: { amount: true } },
-      items: { select: { itemId: true, qty: true, category: true } },
+      items: { select: { id: true, itemId: true, qty: true, category: true, stockBatchId: true, unitCost: true } },
     },
   });
 
@@ -244,29 +256,47 @@ export async function voidTransactionAction(_prev: ActionState, formData: FormDa
     return { ok: false, message: "Transaksi sudah memiliki pembayaran dan tidak bisa dibatalkan." };
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.transaction.update({
-      where: { id },
-      data: {
-        status: "batal",
-        voidedAt: new Date(),
-        voidReason: reason.slice(0, 300),
-      },
-    });
-    for (const line of transaction.items) {
-      if (line.itemId && line.category === "sparepart") {
-        await tx.item.update({
-          where: { id: line.itemId },
-          data: { stock: { increment: line.qty } },
-        });
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM transactions WHERE id = ${id} FOR UPDATE`;
+      const changed = await tx.transaction.updateMany({
+        where: { id, status: "selesai", payments: { none: {} } },
+        data: {
+          status: "batal",
+          voidedAt: new Date(),
+          voidReason: reason.slice(0, 300),
+        },
+      });
+      if (changed.count !== 1) throw new Error("Transaksi sudah dibatalkan atau memiliki pembayaran.");
+      for (const line of [...transaction.items].sort((a, b) => (a.itemId ?? 0) - (b.itemId ?? 0))) {
+        if (line.itemId && line.category === "sparepart") {
+          await lockStockItem(tx, line.itemId);
+          if (line.stockBatchId) {
+            await tx.stockBatch.update({ where: { id: line.stockBatchId }, data: { remaining: { increment: line.qty } } });
+          } else {
+            // Older invoices predate batch tracking; preserve their original cost.
+            await tx.stockBatch.create({ data: {
+              itemId: line.itemId, code: `RETUR-LAMA-${line.id}`, receivedDate: parseDateOnly(todayISO()),
+              quantity: line.qty, remaining: line.qty, unitCost: line.unitCost,
+              notes: `Pengembalian ${transaction.invoiceNo}`,
+            } });
+          }
+          await tx.item.update({
+            where: { id: line.itemId },
+            data: { stock: { increment: line.qty } },
+          });
+        }
       }
-    }
-  });
+    });
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Gagal membatalkan transaksi." };
+  }
 
   revalidatePath("/");
   revalidatePath("/transaksi");
   revalidatePath(`/transaksi/${id}`);
   revalidatePath("/laporan");
   revalidatePath("/stok");
+  for (const line of transaction.items) if (line.itemId) revalidatePath(`/stok/${line.itemId}`);
   return { ok: true, message: "Transaksi dibatalkan dan stok dikembalikan." };
 }

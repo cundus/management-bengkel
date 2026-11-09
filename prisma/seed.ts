@@ -445,6 +445,12 @@ async function main() {
     }
   }
 
+  const stockedItems = await prisma.item.findMany({ where: { category: "sparepart", stock: { gt: 0 } } });
+  await prisma.stockBatch.createMany({ data: stockedItems.map((item) => ({
+    itemId: item.id, code: "STOK-AWAL", receivedDate: dateOnly(today),
+    quantity: item.stock, remaining: item.stock, unitCost: item.cost, notes: "Saldo stok demo",
+  })) });
+
   console.log(`Seed ${APP_BRAND} selesai.`);
   console.log(`Login owner: owner@wmc225.id / ${DEMO_PASSWORD}`);
   console.log(`Login kasir: kasir@wmc225.id / ${DEMO_PASSWORD}`);

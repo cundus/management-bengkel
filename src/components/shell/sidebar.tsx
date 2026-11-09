@@ -11,6 +11,7 @@ import {
   PackageSearch,
   Plus,
   ReceiptText,
+  ShoppingCart,
   Settings2,
   Users,
   WalletCards,
@@ -33,6 +34,7 @@ const ICONS: Record<string, LucideIcon> = {
   "/lainnya": Grid2X2,
   "/pelanggan": Users,
   "/stok": PackageSearch,
+  "/pembelian": ShoppingCart,
   "/pengeluaran": WalletCards,
   "/hutang": Landmark,
   "/pengaturan": Settings2,
@@ -51,7 +53,7 @@ export function Sidebar({
   const pathname = usePathname();
   const primary = PRIMARY_NAV.filter((item) => item.href !== "/lainnya");
   const secondary = SECONDARY_NAV.filter(
-    (item) => user.role === "owner" || !["/pengeluaran", "/hutang", "/pengaturan", "/akun"].includes(item.href),
+    (item) => user.role === "owner" || !["/pembelian", "/pengeluaran", "/hutang", "/pengaturan", "/akun"].includes(item.href),
   );
 
   const renderItem = (item: (typeof PRIMARY_NAV)[number]) => {

@@ -154,14 +154,14 @@ export function PayableDialog({ suppliers }: { suppliers: Supplier[] }) {
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className="btn-primary">
-        <Plus size={16} /> Catat hutang
+        <Plus size={16} /> Tagihan lain
       </button>
       <DialogFrame
         open={open}
         onClose={() => setOpen(false)}
         eyebrow="Hutang usaha"
         title="Catat hutang supplier"
-        description="Pembelian kredit atau tagihan supplier yang belum dibayar."
+        description="Untuk tagihan di luar penerimaan barang. Pembelian sparepart dicatat dari menu Pembelian agar stok dan hutang terhubung."
       >
         {suppliers.length === 0 ? (
           <div className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-[10.5px] text-muted">

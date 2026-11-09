@@ -22,10 +22,11 @@ import { cn } from "@/lib/cn";
 
 export const metadata: Metadata = { title: "Hutang Supplier" };
 
-export default async function PayablesPage() {
+export default async function PayablesPage({ searchParams }: { searchParams: Promise<{ semua?: string }> }) {
   await requireOwner();
+  const includePaid = (await searchParams).semua === "1";
   const [payables, summary, suppliers] = await Promise.all([
-    listPayables(),
+    listPayables({ includePaid }),
     getPayableSummary(),
     listSuppliers(),
   ]);
@@ -40,6 +41,7 @@ export default async function PayablesPage() {
         actions={
           <>
             <SupplierDialog />
+            <Link href="/pembelian/baru" className="btn-primary">Pembelian baru</Link>
             <PayableDialog suppliers={suppliers} />
           </>
         }
@@ -141,7 +143,8 @@ export default async function PayablesPage() {
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div>
             <div className="eyebrow">Daftar kewajiban</div>
-            <h2 className="mt-1 section-title">Hutang berjalan</h2>
+            <h2 className="mt-1 section-title">{includePaid ? "Semua tagihan" : "Hutang berjalan"}</h2>
+            <Link href={includePaid ? "/hutang" : "/hutang?semua=1"} className="text-xs font-bold text-pine underline">{includePaid ? "Hanya belum lunas" : "Lihat juga yang lunas"}</Link>
           </div>
           <span className="badge-neutral">{payables.length} tagihan</span>
         </div>
@@ -159,7 +162,7 @@ export default async function PayablesPage() {
               const paidPercent = percent(payable.paid, payable.amount);
               const phone = formatPhoneForWhatsApp(payable.supplierPhone);
               return (
-                <div key={payable.id} className="p-4 sm:p-5">
+                <div key={payable.id} id={`tagihan-${payable.id}`} className="scroll-mt-24 p-4 sm:p-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex min-w-0 items-start gap-3">
                       <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef0ea] font-display text-[10px] font-extrabold text-pine">
@@ -175,6 +178,7 @@ export default async function PayablesPage() {
                           )}
                         </div>
                         <div className="mt-0.5 text-[11px] font-medium text-muted">{payable.description}</div>
+                        {payable.purchaseId && <Link href={`/pembelian/${payable.purchaseId}`} className="text-xs font-bold text-pine underline">Lihat pembelian PB-{String(payable.purchaseId).padStart(5, "0")}</Link>}
                         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] font-medium text-faint">
                           {payable.referenceNo && <span className="font-mono">{payable.referenceNo}</span>}
                           <span>·</span>
@@ -210,7 +214,7 @@ export default async function PayablesPage() {
                             <Phone size={12} />
                           </a>
                         )}
-                        <PayablePaymentDialog payableId={payable.id} supplierName={payable.supplierName} remaining={payable.remaining} />
+                        {payable.remaining > 0 ? <PayablePaymentDialog payableId={payable.id} supplierName={payable.supplierName} remaining={payable.remaining} /> : <span className="badge-success">Lunas</span>}
                       </div>
                     </div>
                   </div>

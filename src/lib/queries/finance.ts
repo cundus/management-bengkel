@@ -51,6 +51,7 @@ export async function listPayables(options?: { includePaid?: boolean }): Promise
   const rows = await prisma.payable.findMany({
     include: {
       supplier: true,
+      purchase: { select: { id: true } },
       payments: { orderBy: { paidAt: "desc" } },
     },
     orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
@@ -70,6 +71,7 @@ export async function listPayables(options?: { includePaid?: boolean }): Promise
       return {
         id: payable.id,
         supplierId: payable.supplierId,
+        purchaseId: payable.purchase?.id ?? null,
         supplierName: payable.supplier.name,
         supplierPhone: payable.supplier.phone,
         referenceNo: payable.referenceNo,

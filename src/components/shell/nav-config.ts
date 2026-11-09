@@ -67,6 +67,13 @@ export const SECONDARY_NAV: AppNavItem[] = [
     group: "operasional",
   },
   {
+    href: "/pembelian",
+    label: "Pembelian",
+    shortLabel: "Pembelian",
+    description: "Barang masuk & tagihan supplier",
+    group: "operasional",
+  },
+  {
     href: "/pengeluaran",
     label: "Pengeluaran",
     shortLabel: "Pengeluaran",

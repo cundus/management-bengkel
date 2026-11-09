@@ -131,6 +131,7 @@ export function ItemDialog({
                   <select
                     id="item-category"
                     name="category"
+                    disabled={item?.category === "sparepart"}
                     value={category}
                     onChange={(event) => setCategory(event.target.value as Item["category"])}
                     className="select"
@@ -141,6 +142,7 @@ export function ItemDialog({
                       </option>
                     ))}
                   </select>
+                  {item?.category === "sparepart" && <input type="hidden" name="category" value="sparepart" />}
                 </div>
                 <div>
                   <label htmlFor="item-price" className="label">
@@ -162,7 +164,7 @@ export function ItemDialog({
                 </div>
                 <div>
                   <label htmlFor="item-cost" className="label">
-                    Harga modal
+                    Harga modal acuan
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-faint">Rp</span>
@@ -192,10 +194,13 @@ export function ItemDialog({
                       <input
                         id="item-stock"
                         name="stock"
+                        readOnly={Boolean(item)}
                         inputMode="numeric"
                         defaultValue={item?.stock ?? 0}
                         className="input tabular"
                       />
+                      {item && <p className="mt-1 text-[10px] text-muted">Tambah persediaan melalui Batch stok.</p>}
+                      {state.fieldErrors?.stock && <p className="mt-1 text-[9px] text-danger">{state.fieldErrors.stock}</p>}
                     </div>
                     <div>
                       <label htmlFor="item-min" className="label">

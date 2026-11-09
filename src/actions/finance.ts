@@ -67,6 +67,7 @@ export async function createSupplierAction(_prev: ActionState, formData: FormDat
   }
 
   revalidatePath("/hutang");
+  revalidatePath("/pembelian/baru");
   return { ok: true, message: "Supplier berhasil ditambahkan." };
 }
 
@@ -94,17 +95,27 @@ export async function createPayableAction(_prev: ActionState, formData: FormData
   const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } });
   if (!supplier) return { ok: false, message: "Supplier tidak ditemukan." };
 
-  await prisma.payable.create({
-    data: {
-      supplierId,
-      referenceNo,
-      description,
-      amount,
-      businessDate: parseDateOnly(businessDate),
-      dueDate: dueDate ? parseDateOnly(dueDate) : null,
-      createdById: user.id,
-    },
-  });
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM suppliers WHERE id = ${supplierId} FOR UPDATE`;
+      if (referenceNo && await tx.payable.findFirst({ where: { supplierId, referenceNo: { equals: referenceNo, mode: "insensitive" } } })) {
+        throw new Error("Nomor referensi ini sudah memiliki tagihan. Gunakan tagihan yang sudah tercatat.");
+      }
+      await tx.payable.create({
+        data: {
+          supplierId,
+          referenceNo,
+          description,
+          amount,
+          businessDate: parseDateOnly(businessDate),
+          dueDate: dueDate ? parseDateOnly(dueDate) : null,
+          createdById: user.id,
+        },
+      });
+    });
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Gagal menyimpan tagihan." };
+  }
 
   revalidatePath("/hutang");
   revalidatePath("/laporan");
@@ -114,39 +125,46 @@ export async function createPayableAction(_prev: ActionState, formData: FormData
 export async function recordPayablePaymentAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const user = await requireOwner();
   const payableId = Number(formData.get("payableId"));
-  const amount = rupiah(formData.get("amount"));
+  const amount = Number(formData.get("amount"));
   const method = text(formData.get("method"));
   const notes = text(formData.get("notes"), 300) || null;
 
   if (!Number.isInteger(payableId) || payableId <= 0) return { ok: false, message: "Hutang tidak valid." };
-  if (amount <= 0) return { ok: false, message: "Nominal harus lebih dari 0." };
+  if (!Number.isInteger(amount) || amount <= 0 || amount > 2147483647) return { ok: false, message: "Nominal harus berupa bilangan bulat di atas 0." };
   if (!isMethod(method)) return { ok: false, message: "Metode pembayaran tidak valid." };
 
-  const payable = await prisma.payable.findUnique({
-    where: { id: payableId },
-    include: { payments: { select: { amount: true } } },
-  });
-  if (!payable) return { ok: false, message: "Hutang tidak ditemukan." };
-  const paid = payable.payments.reduce((sum, payment) => sum + payment.amount, 0);
-  const remaining = payable.amount - paid;
-  if (remaining <= 0) return { ok: false, message: "Hutang ini sudah lunas." };
-  if (amount > remaining) return { ok: false, message: "Nominal melebihi sisa hutang." };
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM payables WHERE id = ${payableId} FOR UPDATE`;
+    const payable = await tx.payable.findUnique({
+      where: { id: payableId },
+      include: { payments: { select: { amount: true } } },
+    });
+    if (!payable) return { ok: false, message: "Hutang tidak ditemukan." };
+    const paid = payable.payments.reduce((sum, payment) => sum + payment.amount, 0);
+    const remaining = payable.amount - paid;
+    if (remaining <= 0) return { ok: false, message: "Hutang ini sudah lunas." };
+    if (amount > remaining) return { ok: false, message: "Nominal melebihi sisa hutang." };
 
-  await prisma.payablePayment.create({
-    data: {
-      payableId,
-      amount,
-      method,
-      notes,
-      businessDate: parseDateOnly(todayISO()),
-      paidById: user.id,
-    },
+    await tx.payablePayment.create({
+      data: {
+        payableId,
+        amount,
+        method,
+        notes,
+        businessDate: parseDateOnly(todayISO()),
+        paidById: user.id,
+      },
+    });
+
+    return { ok: true, message: "Pembayaran hutang berhasil dicatat." };
   });
+  if (!result.ok) return result;
 
   revalidatePath("/hutang");
+  revalidatePath("/pembelian", "layout");
   revalidatePath("/laporan");
   revalidatePath("/");
-  return { ok: true, message: "Pembayaran hutang berhasil dicatat." };
+  return result;
 }
 
 export async function updateSettingsAction(_prev: ActionState, formData: FormData): Promise<ActionState> {

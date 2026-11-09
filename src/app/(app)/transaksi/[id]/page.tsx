@@ -209,6 +209,7 @@ export default async function TransactionDetailPage({
                           </span>
                           <div>
                             <div className="text-[11.5px] font-bold text-ink">{item.name}</div>
+                            {item.stockBatchCode && <div className="text-[10px] text-muted">Batch {item.stockBatchCode}</div>}
                             <div className="text-[9px] font-medium capitalize text-faint">{item.category}</div>
                           </div>
                         </div>

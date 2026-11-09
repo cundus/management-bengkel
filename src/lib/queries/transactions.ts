@@ -68,7 +68,7 @@ export async function getTransactionById(id: string): Promise<TransactionDetail 
       customer: true,
       vehicle: true,
       createdBy: true,
-      items: { orderBy: { id: "asc" } },
+      items: { orderBy: { id: "asc" }, include: { stockBatch: { select: { code: true } } } },
       payments: { include: { receivedBy: true }, orderBy: { paidAt: "desc" } },
     },
   });
@@ -83,6 +83,7 @@ export async function getTransactionById(id: string): Promise<TransactionDetail 
     qty: item.qty,
     unitPrice: item.unitPrice,
     unitCost: item.unitCost,
+    stockBatchCode: item.stockBatch?.code ?? null,
     subtotal: item.subtotal,
   }));
   const payments: Payment[] = record.payments.map((payment) => ({

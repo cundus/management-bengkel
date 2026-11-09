@@ -14,9 +14,12 @@ function mapItem(item: {
   minStock: number;
   isActive: boolean;
   createdAt: Date;
+  stockBatches?: { remaining: number; unitCost: number }[];
 }): Item {
   return {
-    ...item,
+    id: item.id, sku: item.sku, name: item.name, category: item.category, unit: item.unit,
+    price: item.price, cost: item.cost, stock: item.stock, minStock: item.minStock, isActive: item.isActive,
+    stockValue: item.stockBatches?.reduce((sum, batch) => sum + batch.remaining * batch.unitCost, 0),
     createdAt: dateTimeToISO(item.createdAt),
   };
 }
@@ -36,6 +39,7 @@ export async function listItems(options?: { search?: string; activeOnly?: boolea
         : {}),
     },
     orderBy: [{ category: "desc" }, { name: "asc" }],
+    include: { stockBatches: { where: { remaining: { gt: 0 } }, select: { remaining: true, unitCost: true } } },
   });
   return rows.map(mapItem);
 }

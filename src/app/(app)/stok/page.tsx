@@ -36,7 +36,7 @@ export default async function InventoryPage({
   });
   const spareparts = allItems.filter((item) => item.category === "sparepart");
   const lowStock = spareparts.filter((item) => item.stock <= item.minStock);
-  const stockValue = spareparts.reduce((sum, item) => sum + item.stock * item.cost, 0);
+  const stockValue = spareparts.reduce((sum, item) => sum + (item.stockValue ?? 0), 0);
   const isOwner = user.role === "owner";
 
   return (
@@ -45,7 +45,7 @@ export default async function InventoryPage({
         eyebrow="Persediaan"
         title="Stok & jasa"
         description="Katalog harga dan persediaan sparepart. Stok berkurang otomatis setiap transaksi."
-        actions={isOwner ? <ItemDialog /> : undefined}
+        actions={isOwner ? <><Link href="/pembelian/baru" className="btn-primary">Barang masuk / pembelian</Link><ItemDialog /></> : undefined}
       />
 
       <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-4">
@@ -187,6 +187,7 @@ export default async function InventoryPage({
                               <div>
                                 <div className="text-[12px] font-bold text-ink">{item.name}</div>
                                 <div className="font-mono text-[9px] font-semibold text-faint">{item.sku}</div>
+                                {item.category === "sparepart" && <Link href={`/stok/${item.id}`} className="text-[11px] font-bold text-pine underline">Batch stok</Link>}
                               </div>
                             </div>
                           </td>
@@ -252,6 +253,7 @@ export default async function InventoryPage({
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <div className="text-[12px] font-extrabold text-ink">{item.name}</div>
+                            {item.category === "sparepart" && <Link href={`/stok/${item.id}`} className="text-[11px] font-bold text-pine underline">Batch stok</Link>}
                             <div className="mt-0.5 font-mono text-[9px] font-semibold text-faint">
                               {item.sku} · {item.category}
                             </div>
