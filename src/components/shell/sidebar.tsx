@@ -23,6 +23,7 @@ import { logoutAction } from "@/actions/auth";
 import { ROLE_LABELS, type UserRole } from "@/lib/constants";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { NavigationPending } from "./navigation-pending";
 
 const ICONS: Record<string, LucideIcon> = {
   "/": LayoutDashboard,
@@ -66,12 +67,13 @@ export function Sidebar({
         key={item.href}
         href={item.href}
         className={cn(
-          "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-bold transition-all",
+          "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-bold transition-all",
           active
             ? "bg-white/[0.1] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
             : "text-white/55 hover:bg-white/[0.05] hover:text-white/90",
         )}
       >
+        <NavigationPending />
         <span
           className={cn(
             "flex size-8 items-center justify-center rounded-lg transition-colors",

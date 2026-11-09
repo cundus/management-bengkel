@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { isNavActive } from "./nav-config";
 import { cn } from "@/lib/cn";
+import { NavigationPending } from "./navigation-pending";
 
 const ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/", label: "Beranda", icon: LayoutDashboard },
@@ -44,6 +45,7 @@ export function BottomNav({ outstandingCount = 0 }: { outstandingCount?: number 
                 active ? "text-white" : "text-white/40",
               )}
             >
+              <NavigationPending />
               <span
                 className={cn(
                   "relative flex h-7 w-11 items-center justify-center rounded-full transition-all",
