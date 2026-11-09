@@ -1,0 +1,52 @@
+{
+  "id": "/",
+  "name": "WMC 225 — Manajemen Bengkel",
+  "short_name": "WMC 225",
+  "description": "Catat transaksi servis, pendapatan, piutang, hutang, dan stok bengkel langsung dari ponsel.",
+  "lang": "id",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#F4F1EA",
+  "theme_color": "#17231D",
+  "categories": ["business", "productivity", "finance"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Transaksi baru",
+      "short_name": "Transaksi",
+      "description": "Buat nota servis baru",
+      "url": "/transaksi/baru",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Piutang",
+      "short_name": "Piutang",
+      "description": "Lihat tagihan pelanggan",
+      "url": "/piutang",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

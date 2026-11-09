@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wmc225-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wmc
+      POSTGRES_PASSWORD: wmc
+      POSTGRES_DB: wmc225
+    ports:
+      - "5432:5432"
+    volumes:
+      - wmc225-postgres-data:/var/lib/postgresql/data
+      - ./docker/init-databases.sql:/docker-entrypoint-initdb.d/01-databases.sql:ro
+
+volumes:
+  wmc225-postgres-data:
