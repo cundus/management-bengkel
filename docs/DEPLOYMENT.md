@@ -1,5 +1,15 @@
 # Deploy WMC 225 ke Vercel + PostgreSQL
 
+## Konfigurasi project ini
+
+- Project Vercel: `cundus-projects/management-bengkel`.
+- URL production: `https://management-bengkel-ebon.vercel.app`.
+- `vercel.json` menetapkan Next.js, region Singapore (`sin1`), install dengan lockfile, dan build `pnpm build`. Node.js dipatok ke `22.x` di `package.json`.
+- Environment production memakai database Prisma Postgres yang sudah ada di Singapore, dengan pooled URL (`connection_limit=5`), direct URL untuk migrasi, dan secret session yang sama.
+- Salinan konfigurasi deployment lokal ada di `.env.vercel.local`, diabaikan Git dan tidak di-upload sebagai source. Isi variable production melalui `vercel env add` dengan input stdin.
+- Migrasi dan akun owner sudah tersedia; perpindahan hosting tidak membutuhkan reset atau seed database.
+- Untuk deploy ulang dari checkout yang sudah terhubung: `vercel project inspect --non-interactive`, lalu `vercel deploy --prod --scope cundus-projects`.
+
 Panduan ini menggunakan **Prisma ORM** dengan PostgreSQL terkelola. Cocok untuk Neon, Vercel Postgres, Supabase, atau PostgreSQL mandiri.
 
 ## Ringkasan arsitektur production

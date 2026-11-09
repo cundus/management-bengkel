@@ -1,0 +1,12 @@
+.env
+.env.*
+.netlify
+.next
+data
+node_modules
+.pnpm-store
+.npm-cache
+test-results
+playwright-report
+*.tsbuildinfo
+next-env.d.ts

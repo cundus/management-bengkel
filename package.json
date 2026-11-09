@@ -5,7 +5,7 @@
   "description": "WMC 225 — manajemen bengkel mobile-first dengan Prisma dan PostgreSQL.",
   "packageManager": "pnpm@9.15.9",
   "engines": {
-    "node": ">=22.0.0"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "next dev",
