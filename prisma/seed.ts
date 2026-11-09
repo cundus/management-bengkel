@@ -41,6 +41,7 @@ async function main() {
     data: {
       name: "Budi Santoso",
       email: "owner@wmc225.id",
+      username: "owner",
       passwordHash,
       role: "owner",
       createdAt: now,
@@ -50,6 +51,7 @@ async function main() {
     data: {
       name: "Sari Wulandari",
       email: "kasir@wmc225.id",
+      username: "kasir",
       passwordHash,
       role: "kasir",
       createdAt: now,

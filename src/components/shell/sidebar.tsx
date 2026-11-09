@@ -36,6 +36,7 @@ const ICONS: Record<string, LucideIcon> = {
   "/pengeluaran": WalletCards,
   "/hutang": Landmark,
   "/pengaturan": Settings2,
+  "/akun": Users,
 };
 
 export function Sidebar({
@@ -50,7 +51,7 @@ export function Sidebar({
   const pathname = usePathname();
   const primary = PRIMARY_NAV.filter((item) => item.href !== "/lainnya");
   const secondary = SECONDARY_NAV.filter(
-    (item) => user.role === "owner" || !["/pengeluaran", "/hutang", "/pengaturan"].includes(item.href),
+    (item) => user.role === "owner" || !["/pengeluaran", "/hutang", "/pengaturan", "/akun"].includes(item.href),
   );
 
   const renderItem = (item: (typeof PRIMARY_NAV)[number]) => {

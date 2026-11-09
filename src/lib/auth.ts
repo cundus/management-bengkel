@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SignJWT, jwtVerify } from "jose";
@@ -29,11 +30,12 @@ function getSecret(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
-export async function createSession(user: SessionUser): Promise<void> {
+export async function createSession(user: SessionUser, passwordHash: string): Promise<void> {
   const token = await new SignJWT({
     name: user.name,
     email: user.email,
     role: user.role,
+    credentialVersion: createHash("sha256").update(passwordHash).digest("hex"),
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(String(user.id))
@@ -67,9 +69,10 @@ async function readSession(): Promise<SessionUser | null> {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, email: true, role: true, passwordHash: true },
     });
-    return user ?? null;
+    if (!user || payload.credentialVersion !== createHash("sha256").update(user.passwordHash).digest("hex")) return null;
+    return { id: user.id, name: user.name, email: user.email, role: user.role };
   } catch {
     return null;
   }

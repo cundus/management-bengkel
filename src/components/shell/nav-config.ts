@@ -46,6 +46,13 @@ export const PRIMARY_NAV: AppNavItem[] = [
 
 export const SECONDARY_NAV: AppNavItem[] = [
   {
+    href: "/akun",
+    label: "Manajemen Akun",
+    shortLabel: "Akun",
+    description: "Akun dan hak akses",
+    group: "data",
+  },
+  {
     href: "/pelanggan",
     label: "Pelanggan & Kendaraan",
     shortLabel: "Pelanggan",

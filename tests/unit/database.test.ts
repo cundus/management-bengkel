@@ -20,6 +20,30 @@ afterAll(async () => {
 });
 
 describe("integritas seed PostgreSQL", () => {
+  it("menolak username duplikat pada database", async () => {
+    await expect(prisma.user.create({ data: {
+      name: "Duplikat", email: "duplicate-username@example.test", username: "owner", passwordHash: "test-hash", role: "kasir",
+    } })).rejects.toMatchObject({ code: "P2002" });
+  });
+
+  it("menolak username nonkanonik pada database", async () => {
+    await expect(prisma.user.create({ data: {
+      name: "Nonkanonik", email: "invalid-username@example.test", username: "OWNER", passwordHash: "test-hash", role: "kasir",
+    } })).rejects.toThrow();
+  });
+
+  it("mempertahankan dukungan beberapa akun lama tanpa username", async () => {
+    await expect(prisma.$transaction(async (tx) => {
+      await tx.user.createMany({ data: [1, 2].map((id) => ({
+        name: `Legacy ${id}`, email: `legacy-null-${id}@example.test`, passwordHash: "test-hash", role: "kasir" as const,
+      })) });
+      const users = await tx.user.findMany({ where: { email: { in: ["legacy-null-1@example.test", "legacy-null-2@example.test"] } } });
+      expect(users).toHaveLength(2);
+      expect(users.every((user) => user.username === null)).toBe(true);
+      throw new Error("rollback-legacy-check");
+    })).rejects.toThrow("rollback-legacy-check");
+  });
+
   it("mengisi data demo inti dan brand WMC 225", async () => {
     const [users, customers, transactions, items, expenses, payables, brand] = await Promise.all([
       prisma.user.count(),

@@ -68,6 +68,9 @@ Docker Compose membuat tiga database: `wmc225` (development), `wmc225_e2e` (Play
 
 ### Akun demo
 
+Login menerima **username atau email**. Pemilik dapat mengatur username melalui **Manajemen Akun**.
+Username bersifat opsional, unik, dan tidak membedakan huruf besar/kecil: 3–30 karakter huruf/angka, titik, garis bawah, atau tanda hubung, diawali huruf/angka. Akun lama tetap dapat masuk melalui email sampai username diatur. Seed menyediakan username `owner` dan `kasir`.
+
 | Role | Email | Kata sandi |
 | --- | --- | --- |
 | Pemilik | `owner@wmc225.id` | `wmc225` |

@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { usernameSchema } from "../src/lib/username";
 
 if (!process.env.DATABASE_URL && fs.existsSync(".env")) {
   process.loadEnvFile(".env");
@@ -17,6 +18,13 @@ if (!process.env.DATABASE_URL && fs.existsSync(".env")) {
 const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
 const name = process.env.ADMIN_NAME?.trim() || "Pemilik WMC 225";
 const password = process.env.ADMIN_PASSWORD;
+const usernameInput = process.env.ADMIN_USERNAME?.trim();
+const parsedUsername = usernameInput ? usernameSchema.safeParse(usernameInput) : null;
+if (parsedUsername && !parsedUsername.success) {
+  console.error(parsedUsername.error.issues[0].message);
+  process.exit(1);
+}
+const username = parsedUsername?.success ? parsedUsername.data : undefined;
 
 if (!email || !password) {
   console.error("ADMIN_EMAIL dan ADMIN_PASSWORD wajib diisi.");
@@ -34,8 +42,8 @@ async function main() {
 
   const user = await prisma.user.upsert({
     where: { email },
-    update: { name, passwordHash, role: "owner" },
-    create: { email: email!, name, passwordHash, role: "owner" },
+    update: { name, username, passwordHash, role: "owner" },
+    create: { email: email!, username, name, passwordHash, role: "owner" },
   });
 
   const initialSettings: [string, string][] = [

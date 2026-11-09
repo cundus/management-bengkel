@@ -90,6 +90,15 @@ export default async function MorePage({
       color: "bg-[#ece3ef] text-[#62436b]",
       show: isOwner,
     },
+    {
+      href: "/akun",
+      label: "Manajemen akun",
+      description: "Akun pemilik, kasir, dan kata sandi",
+      icon: ShieldCheck,
+      stat: "Khusus pemilik",
+      color: "bg-[#ece3ef] text-[#62436b]",
+      show: isOwner,
+    },
   ].filter((menu) => menu.show);
 
   return (

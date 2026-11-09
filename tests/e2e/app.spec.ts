@@ -121,13 +121,18 @@ test.describe("WMC 225 — alur manajemen bengkel", () => {
     });
     const page = await context.newPage();
     await page.goto("/login");
-    await page.getByRole("button", { name: /Kasir/ }).click();
+    await page.getByLabel("Username atau email", { exact: true }).fill("kasir");
+    await page.getByLabel("Kata sandi", { exact: true }).fill("wmc225");
     await page.getByRole("button", { name: /Masuk ke dashboard/ }).click();
     await page.waitForURL("http://localhost:3100/");
 
     await page.goto("/pengeluaran");
     await page.waitForURL(/\/lainnya\?error=akses-terbatas/);
     await expect(page.getByText("Akses khusus pemilik").first()).toBeVisible();
+
+    await page.goto("/akun");
+    await page.waitForURL(/\/lainnya\?error=akses-terbatas/);
+    await expect(page.getByRole("link", { name: /Manajemen akun/i })).toHaveCount(0);
 
     await page.goto("/stok");
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Stok & jasa");
