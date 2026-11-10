@@ -18,7 +18,7 @@ Variable server harus tersedia untuk build dan Functions. `.env.netlify.local` m
 
 ## Database
 
-Jalankan dari root project untuk menerapkan migrasi ke database deployment:
+Build Netlify menjalankan `pnpm db:deploy` (`prisma migrate deploy`) sebelum `pnpm build`, jadi migrasi baru diterapkan otomatis; jika migrasi gagal, deploy dibatalkan. Untuk menerapkan migrasi manual dari root project:
 
 ```powershell
 node --env-file=.env.netlify.local node_modules/prisma/build/index.js migrate deploy
@@ -36,8 +36,8 @@ Script admin melakukan upsert; memakai email akun yang sudah ada akan mengganti 
 
 1. Push source dan lockfile ke `git@github.com:cundus/management-bengkel.git`.
 2. Di Netlify, import repository tersebut dan pilih branch `main`.
-3. Gunakan base directory root project. `netlify.toml` menetapkan Node 22, pnpm 9.15.9, build `pnpm build`, dan publish `.next`.
-4. Isi environment, lalu deploy. Build menjalankan Prisma Generate; migrasi dijalankan terpisah sebelum deployment yang membutuhkan schema baru.
+3. Gunakan base directory root project. `netlify.toml` menetapkan Node 22, pnpm 9.15.9, build `pnpm db:deploy && pnpm build`, dan publish `.next`.
+4. Isi environment, lalu deploy. Build menerapkan migrasi lalu menjalankan Prisma Generate; pastikan `DATABASE_URL` dan `DIRECT_URL` tersedia saat build.
 5. Isi `NEXT_PUBLIC_APP_URL` sesuai URL final dan rebuild bila berubah.
 6. Cek login owner, pembuatan nota, pembayaran, stok, dan laporan. Aktifkan backup di provider database.
 

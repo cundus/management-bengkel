@@ -119,7 +119,6 @@ Script ini melakukan upsert akun owner dan setting awal bengkel tanpa menambahka
 7. Deploy.
 
 Catatan:
-- Vercel build **tidak** menjalankan migrasi. Jalankan langkah 3 sebelum deploy yang mengubah schema.
 - Prisma Client di-generate di build Vercel untuk platform serverless.
 - Di serverless, jangan membuat `new PrismaClient()` per request. Kode menggunakan singleton di `src/lib/db.ts`.
 

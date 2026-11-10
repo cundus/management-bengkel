@@ -1,5 +1,5 @@
 [build]
-  command = "pnpm build"
+  command = "pnpm db:deploy && pnpm build"
   publish = ".next"
 
 [build.environment]
