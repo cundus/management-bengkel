@@ -174,6 +174,25 @@ export type DashboardData = {
   lowStock: Item[];
 };
 
+export type MarginLine = {
+  name: string;
+  category: "jasa" | "sparepart";
+  qty: number;
+  revenue: number;
+  cost: number;
+};
+
+export type MarginSummary = {
+  revenue: number;
+  cost: number;
+  grossProfit: number;
+  margin: number;
+  qty: number;
+  lines: number;
+};
+
+export type MarginItem = MarginLine & { grossProfit: number; margin: number };
+
 export type ReportData = {
   month: string;
   start: string;
@@ -195,6 +214,8 @@ export type ReportData = {
   expenseByCategory: { category: string; amount: number }[];
   paymentMethods: { method: string; amount: number; count: number }[];
   topItems: { name: string; qty: number; revenue: number; category: "jasa" | "sparepart" }[];
+  categoryMargins: Record<"jasa" | "sparepart", MarginSummary>;
+  itemMargins: Record<"jasa" | "sparepart", MarginItem[]>;
   recentPayments: {
     id: number;
     invoiceNo: string;

@@ -9,9 +9,11 @@ import {
   Download,
   HandCoins,
   Landmark,
+  Package,
   ReceiptText,
   TrendingUp,
   WalletCards,
+  Wrench,
 } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { getMonthlyReport, monthOptions } from "@/lib/queries/reports";
@@ -35,6 +37,11 @@ const METHOD_LABELS: Record<string, string> = {
   transfer: "Transfer",
   qris: "QRIS",
 };
+
+const MARGIN_GROUPS = [
+  { key: "jasa", label: "Jasa", title: "Margin produk jasa", unit: "pekerjaan", icon: Wrench },
+  { key: "sparepart", label: "Barang", title: "Margin produk barang", unit: "unit", icon: Package },
+] as const;
 
 export default async function ReportPage({
   searchParams,
@@ -294,6 +301,83 @@ export default async function ReportPage({
         </div>
       </section>
 
+      <section className="mt-4 grid gap-4 xl:grid-cols-2">
+        {MARGIN_GROUPS.map((group) => {
+          const summary = report.categoryMargins[group.key];
+          const items = report.itemMargins[group.key];
+          const Icon = group.icon;
+          return (
+            <div key={group.key} className="card p-5 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="eyebrow">Margin {group.label.toLowerCase()}</div>
+                  <h2 className="mt-1 section-title">{group.title}</h2>
+                </div>
+                <Icon size={18} className="text-faint" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                {[
+                  { label: "Omset", value: formatRupiah(summary.revenue) },
+                  { label: "Modal (HPP)", value: formatRupiah(summary.cost) },
+                  { label: "Laba kotor", value: formatRupiah(summary.grossProfit) },
+                  { label: "Margin", value: `${summary.margin}%` },
+                ].map((stat) => (
+                  <div key={stat.label} className="rounded-xl bg-[#fbf9f4] px-3 py-2.5">
+                    <div className="text-[9px] font-bold uppercase tracking-[0.08em] text-faint">{stat.label}</div>
+                    <div className="mt-0.5 text-[12px] font-extrabold text-ink tabular">{stat.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-[9.5px] font-medium text-faint">
+                {percent(summary.revenue, report.revenue)}% dari omset · {summary.qty} {group.unit} terjual
+              </div>
+              {items.length === 0 ? (
+                <p className="mt-4 rounded-xl border border-dashed border-line px-4 py-6 text-center text-[10px] text-faint">
+                  Belum ada penjualan {group.label.toLowerCase()} bulan ini.
+                </p>
+              ) : (
+                <div className="table-wrap mt-3">
+                  <table className="data-table min-w-[460px]">
+                    <thead>
+                      <tr>
+                        <th>{group.label}</th>
+                        <th className="text-center">Qty</th>
+                        <th className="text-right">Omset</th>
+                        <th className="text-right">Laba</th>
+                        <th className="text-right">Margin</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.slice(0, 8).map((item) => (
+                        <tr key={item.name}>
+                          <td className="max-w-[180px] truncate text-[11px] font-semibold text-ink">{item.name}</td>
+                          <td className="text-center text-[11px] text-muted tabular">{item.qty}</td>
+                          <td className="text-right text-[11px] text-muted tabular">{formatRupiah(item.revenue)}</td>
+                          <td
+                            className={cn(
+                              "text-right text-[11px] font-bold tabular",
+                              item.grossProfit >= 0 ? "text-ink" : "text-danger",
+                            )}
+                          >
+                            {formatRupiah(item.grossProfit)}
+                          </td>
+                          <td className="text-right text-[11px] font-semibold text-muted tabular">{item.margin}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {items.length > 8 && (
+                    <div className="mt-2 text-[9.5px] font-medium text-faint">
+                      +{items.length - 8} {group.label.toLowerCase()} lain — lihat lengkapnya di ekspor laporan.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </section>
+
       <section className="mt-4 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="card p-5 sm:p-6">
           <div className="flex items-center justify-between">
@@ -408,7 +492,8 @@ export default async function ReportPage({
         <CircleDollarSign size={14} className="mt-0.5 shrink-0 text-success" />
         <p className="text-[10px] leading-relaxed text-muted">
           <span className="font-bold text-ink">Cara membaca:</span> Omset adalah nilai nota bulan ini; HPP dihitung dari
-          modal item yang terjual. Laba bersih = omset − HPP − biaya operasional. Kas diterima bisa berbeda dari omset
+          modal item yang terjual. Margin jasa dan barang dihitung terpisah; diskon nota dibagi proporsional ke tiap
+          item. Laba bersih = omset − HPP − biaya operasional. Kas diterima bisa berbeda dari omset
           karena pembayaran DP, pelunasan piutang lama, atau transaksi belum dibayar. Ini bukan pengganti laporan pajak.
         </p>
       </div>

@@ -1,4 +1,4 @@
-import type { PaymentStatus } from "./types";
+import type { MarginItem, MarginLine, MarginSummary, PaymentStatus } from "./types";
 
 export type CartLine = {
   qty: number;
@@ -66,4 +66,79 @@ export function normalizePhoneForWhatsApp(phone: string): string | null {
   if (digits.startsWith("0")) digits = `62${digits.slice(1)}`;
   if (digits.startsWith("8")) digits = `62${digits}`;
   return digits.startsWith("62") && digits.length >= 10 ? digits : null;
+}
+
+/**
+ * Bagi diskon nota ke tiap baris secara proporsional terhadap subtotal baris,
+ * supaya omset per kategori/item tetap berjumlah sama dengan total nota.
+ * Sisa pembulatan dibebankan ke baris dengan subtotal terbesar.
+ */
+export function allocateDiscount(subtotals: number[], discount: number): number[] {
+  const gross = subtotals.reduce((sum, value) => sum + value, 0);
+  const safeDiscount = Math.min(Math.max(0, Math.round(discount)), gross);
+  if (gross <= 0 || safeDiscount === 0) return subtotals.map((value) => value);
+  const shares = subtotals.map((value) => Math.floor((value * safeDiscount) / gross));
+  const remainder = safeDiscount - shares.reduce((sum, value) => sum + value, 0);
+  if (remainder > 0) {
+    const largest = subtotals.indexOf(Math.max(...subtotals));
+    shares[largest] += remainder;
+  }
+  return subtotals.map((value, index) => value - shares[index]);
+}
+
+type MarginTransaction = {
+  discount: number;
+  items: { name: string; category: "jasa" | "sparepart"; qty: number; unitCost: number; subtotal: number }[];
+};
+
+function marginPercent(profit: number, revenue: number): number {
+  if (revenue <= 0) return 0;
+  return Math.round((profit / revenue) * 1000) / 10;
+}
+
+export function marginByCategory(transactions: MarginTransaction[]): {
+  categories: Record<"jasa" | "sparepart", MarginSummary>;
+  items: Record<"jasa" | "sparepart", MarginItem[]>;
+} {
+  const empty = (): MarginSummary => ({ revenue: 0, cost: 0, grossProfit: 0, margin: 0, qty: 0, lines: 0 });
+  const categories = { jasa: empty(), sparepart: empty() };
+  const itemMap = new Map<string, MarginLine>();
+
+  for (const transaction of transactions) {
+    const netRevenues = allocateDiscount(
+      transaction.items.map((item) => item.subtotal),
+      transaction.discount,
+    );
+    transaction.items.forEach((item, index) => {
+      const revenue = netRevenues[index];
+      const cost = item.qty * item.unitCost;
+      const summary = categories[item.category];
+      summary.revenue += revenue;
+      summary.cost += cost;
+      summary.qty += item.qty;
+      summary.lines += 1;
+
+      const key = `${item.category}|${item.name}`;
+      const current = itemMap.get(key) ?? { name: item.name, category: item.category, qty: 0, revenue: 0, cost: 0 };
+      current.qty += item.qty;
+      current.revenue += revenue;
+      current.cost += cost;
+      itemMap.set(key, current);
+    });
+  }
+
+  for (const summary of Object.values(categories)) {
+    summary.grossProfit = summary.revenue - summary.cost;
+    summary.margin = marginPercent(summary.grossProfit, summary.revenue);
+  }
+
+  const items = { jasa: [] as MarginItem[], sparepart: [] as MarginItem[] };
+  for (const line of itemMap.values()) {
+    const grossProfit = line.revenue - line.cost;
+    items[line.category].push({ ...line, grossProfit, margin: marginPercent(grossProfit, line.revenue) });
+  }
+  items.jasa.sort((a, b) => b.grossProfit - a.grossProfit);
+  items.sparepart.sort((a, b) => b.grossProfit - a.grossProfit);
+
+  return { categories, items };
 }

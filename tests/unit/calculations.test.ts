@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   agingBucket,
+  allocateDiscount,
   calculateTransactionTotals,
   canAcceptPayment,
   generateInvoiceNumber,
   growth,
+  marginByCategory,
   normalizePhoneForWhatsApp,
   paymentStatus,
   remainingAmount,
@@ -86,5 +88,41 @@ describe("utilitas lain", () => {
     expect(growth(80, 100)).toBe(-20);
     expect(growth(0, 0)).toBe(0);
     expect(growth(100, 0)).toBeNull();
+  });
+});
+
+
+describe("allocateDiscount", () => {
+  it("membagi diskon proporsional dan jumlahnya tetap sama dengan total", () => {
+    const net = allocateDiscount([100_000, 50_000, 25_000], 10_000);
+    expect(net.reduce((sum, value) => sum + value, 0)).toBe(165_000);
+    expect(net[1]).toBe(47_143);
+  });
+
+  it("tidak mengubah apa pun tanpa diskon", () => {
+    expect(allocateDiscount([10_000, 5_000], 0)).toEqual([10_000, 5_000]);
+  });
+});
+
+describe("marginByCategory", () => {
+  it("memisahkan margin jasa dan sparepart setelah diskon", () => {
+    const result = marginByCategory([
+      {
+        discount: 15_000,
+        items: [
+          { name: "Servis", category: "jasa", qty: 1, unitCost: 0, subtotal: 100_000 },
+          { name: "Oli", category: "sparepart", qty: 1, unitCost: 35_000, subtotal: 50_000 },
+        ],
+      },
+      {
+        discount: 0,
+        items: [{ name: "Oli", category: "sparepart", qty: 2, unitCost: 35_000, subtotal: 100_000 }],
+      },
+    ]);
+    expect(result.categories.jasa).toMatchObject({ revenue: 90_000, cost: 0, grossProfit: 90_000, margin: 100 });
+    expect(result.categories.sparepart).toMatchObject({ revenue: 145_000, cost: 105_000, grossProfit: 40_000, qty: 3 });
+    expect(result.categories.sparepart.margin).toBe(27.6);
+    expect(result.items.sparepart).toHaveLength(1);
+    expect(result.items.sparepart[0]).toMatchObject({ name: "Oli", qty: 3, grossProfit: 40_000 });
   });
 });

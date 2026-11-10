@@ -3,6 +3,7 @@ import { dateOnlyToISO, endOfMonthISO, monthRange, parseDateOnly, todayISO } fro
 import { openTransactionRecords } from "./mappers";
 import { listTransactionInclude } from "./mappers";
 import type { ReportData } from "../types";
+import { marginByCategory } from "../calculations";
 
 function previousMonth(month: string): string {
   const [year, monthNumber] = month.split("-").map(Number);
@@ -139,6 +140,7 @@ export async function getMonthlyReport(month: string): Promise<ReportData> {
     }
   }
   const topItems = [...itemMap.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 6);
+  const margins = marginByCategory(transactions);
 
   const open = openTransactionRecords(openRecords);
   const outstanding = open.reduce((sum, transaction) => sum + transaction.remaining, 0);
@@ -178,6 +180,8 @@ export async function getMonthlyReport(month: string): Promise<ReportData> {
     expenseByCategory,
     paymentMethods,
     topItems,
+    categoryMargins: margins.categories,
+    itemMargins: margins.items,
     recentPayments,
   };
 }
