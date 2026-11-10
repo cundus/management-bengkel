@@ -1,15 +1,31 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { AlertCircle, ArrowRight, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail } from "lucide-react";
+import { AlertCircle, ArrowRight, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail, UserRound } from "lucide-react";
 import { loginAction } from "@/actions/auth";
 import { initialActionState } from "@/lib/action-state";
+import { cn } from "@/lib/cn";
+
+// Akun dari prisma/seed.ts. Hanya ditampilkan saat development supaya tidak bocor ke production.
+const SHOW_DEMO_ACCOUNTS = process.env.NODE_ENV === "development";
+const DEMO_PASSWORD = "wmc225";
+const DEMO_ACCOUNTS = [
+  { role: "Pemilik", email: "owner@wmc225.id", initials: "BS" },
+  { role: "Kasir", email: "kasir@wmc225.id", initials: "SW" },
+];
 
 export function LoginForm() {
   const [state, formAction, pending] = useActionState(loginAction, initialActionState);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedDemo, setSelectedDemo] = useState<string | null>(null);
+
+  function fillDemo(demoEmail: string) {
+    setIdentifier(demoEmail);
+    setPassword(DEMO_PASSWORD);
+    setSelectedDemo(demoEmail);
+  }
 
   return (
     <>
@@ -92,6 +108,43 @@ export function LoginForm() {
         </button>
       </form>
 
+      {SHOW_DEMO_ACCOUNTS && (
+        <>
+          <div className="my-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-line" />
+            <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-faint">Akun demo</span>
+            <div className="h-px flex-1 bg-line" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5">
+            {DEMO_ACCOUNTS.map((account) => (
+              <button
+                type="button"
+                key={account.email}
+                onClick={() => fillDemo(account.email)}
+                className={cn(
+                  "group flex items-center gap-2.5 rounded-xl border bg-surface p-2.5 text-left transition-all hover:border-brand/40 hover:bg-brand-soft/40",
+                  selectedDemo === account.email ? "border-brand ring-4 ring-brand/10" : "border-line",
+                )}
+              >
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#f2eee6] font-display text-[10px] font-extrabold text-ink">
+                  {account.initials}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-ink">
+                    <UserRound size={11} />
+                    {account.role}
+                  </div>
+                  <div className="mt-0.5 truncate text-[10px] font-medium text-faint">{account.email}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+          <p className="mt-2.5 text-center text-[10px] font-medium text-faint">
+            Kata sandi demo: <span className="font-mono font-bold text-muted">{DEMO_PASSWORD}</span>
+          </p>
+        </>
+      )}
     </>
   );
 }
