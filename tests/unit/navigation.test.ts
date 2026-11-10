@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
   transaction: { findMany: vi.fn() },
   item: { count: vi.fn(), fields: { minStock: { name: "minStock" } } },
+  voidRequest: { count: vi.fn() },
 }));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/dates", async (importOriginal) => ({
@@ -26,9 +27,13 @@ describe("ringkasan navigasi", () => {
       { total: 0, dueDate: null, payments: [] },
     ]);
     db.item.count.mockResolvedValue(2);
+    db.voidRequest.count.mockResolvedValue(3);
 
     expect(await getNavigationSummary()).toEqual({
-      today: "2026-11-09", outstanding: 4, overdue: 1, lowStock: 2,
+      today: "2026-11-09", outstanding: 4, overdue: 1, lowStock: 2, voidRequests: 3,
+    });
+    expect(db.voidRequest.count).toHaveBeenCalledWith({
+      where: { status: "pending", transaction: { status: "selesai" } },
     });
     expect(db.transaction.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { status: "selesai" } }));
     expect(db.item.count).toHaveBeenCalledWith({
@@ -39,8 +44,9 @@ describe("ringkasan navigasi", () => {
   it("menghasilkan badge kosong untuk database baru", async () => {
     db.transaction.findMany.mockResolvedValue([]);
     db.item.count.mockResolvedValue(0);
+    db.voidRequest.count.mockResolvedValue(0);
     expect(await getNavigationSummary()).toEqual({
-      today: "2026-11-09", outstanding: 0, overdue: 0, lowStock: 0,
+      today: "2026-11-09", outstanding: 0, overdue: 0, lowStock: 0, voidRequests: 0,
     });
   });
 });

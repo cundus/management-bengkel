@@ -81,6 +81,25 @@ export function SettingsForm({ settings }: { settings: Record<string, string> })
           />
           <p className="mt-1.5 text-[9.5px] text-faint">Tampil di bagian bawah nota transaksi.</p>
         </div>
+        <div>
+          <label htmlFor="void-max-days" className="label">
+            Batas pembatalan nota (hari)
+          </label>
+          <input
+            id="void-max-days"
+            name="voidMaxDays"
+            type="number"
+            min={0}
+            max={3650}
+            inputMode="numeric"
+            defaultValue={settings.void_max_days}
+            placeholder="Tanpa batas"
+            className="input"
+          />
+          <p className="mt-1.5 text-[9.5px] text-faint">
+            Nota lebih lama dari batas ini tidak bisa dibatalkan. Kosongkan atau isi 0 untuk tanpa batas.
+          </p>
+        </div>
       </div>
 
       <div className="flex justify-end border-t border-line pt-4">

@@ -3,9 +3,10 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { requireOwner, requireUser } from "@/lib/auth";
-import { canAcceptPayment, generateInvoiceNumber } from "@/lib/calculations";
+import type { Prisma } from "@prisma/client";
+import { canAcceptPayment, canRefund, generateInvoiceNumber, parseVoidMaxDays, voidWindowCheck } from "@/lib/calculations";
 import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/constants";
-import { addDaysISO, isValidISODate, parseDateOnly, todayISO } from "@/lib/dates";
+import { addDaysISO, dateOnlyToISO, isValidISODate, parseDateOnly, todayISO } from "@/lib/dates";
 import { prisma } from "@/lib/db";
 import type { ActionState } from "@/lib/action-state";
 import { consumeStock, returnStock } from "@/lib/stock";
@@ -236,39 +237,80 @@ export async function recordPaymentAction(
   return result;
 }
 
+async function getVoidMaxDays(tx: Prisma.TransactionClient): Promise<number | null> {
+  const setting = await tx.setting.findUnique({ where: { key: "void_max_days" } });
+  return parseVoidMaxDays(setting?.value);
+}
+
+function revalidateVoid(id: string, itemIds: (number | null)[] = []) {
+  revalidatePath("/");
+  revalidatePath("/transaksi");
+  revalidatePath(`/transaksi/${id}`);
+  revalidatePath("/piutang");
+  revalidatePath("/laporan");
+  revalidatePath("/pelanggan");
+  revalidatePath("/stok");
+  for (const itemId of itemIds) if (itemId) revalidatePath(`/stok/${itemId}`);
+}
+
+// Pemilik membatalkan nota. Pembayaran lama tetap tersimpan; uang yang dikembalikan dicatat
+// sebagai Refund di tanggal hari ini. Pengajuan kasir yang masih pending ikut disetujui.
 export async function voidTransactionAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const user = await requireOwner();
   const id = String(formData.get("transactionId") ?? "");
   const reason = String(formData.get("reason") ?? "").trim();
   if (!reason) return { ok: false, message: "Alasan pembatalan wajib diisi." };
+  const refundAmount = Math.floor(Number(formData.get("refundAmount") ?? 0) || 0);
+  const refundMethodRaw = String(formData.get("refundMethod") ?? "tunai");
+  if (!isPaymentMethod(refundMethodRaw)) return { ok: false, message: "Metode refund tidak valid." };
+  const refundMethod: PaymentMethod = refundMethodRaw;
 
-  const transaction = await prisma.transaction.findUnique({
-    where: { id },
-    include: {
-      payments: { select: { amount: true } },
-      items: { select: { id: true, itemId: true, qty: true, category: true, stockBatchId: true, unitCost: true } },
-    },
-  });
-
-  if (!transaction) return { ok: false, message: "Transaksi tidak ditemukan." };
-  if (transaction.status === "batal") return { ok: false, message: "Transaksi sudah dibatalkan." };
-  const paid = transaction.payments.reduce((sum, payment) => sum + payment.amount, 0);
-  if (paid > 0) {
-    return { ok: false, message: "Transaksi sudah memiliki pembayaran dan tidak bisa dibatalkan." };
-  }
-
+  let itemIds: (number | null)[] = [];
   try {
     await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM transactions WHERE id = ${id} FOR UPDATE`;
-      const changed = await tx.transaction.updateMany({
-        where: { id, status: "selesai", payments: { none: {} } },
+      const transaction = await tx.transaction.findUnique({
+        where: { id },
+        include: {
+          payments: { select: { amount: true } },
+          items: { select: { id: true, itemId: true, qty: true, category: true, stockBatchId: true, unitCost: true } },
+        },
+      });
+      if (!transaction) throw new Error("Transaksi tidak ditemukan.");
+      if (transaction.status === "batal") throw new Error("Transaksi sudah dibatalkan.");
+
+      const today = todayISO();
+      const window = voidWindowCheck(dateOnlyToISO(transaction.businessDate), today, await getVoidMaxDays(tx));
+      if (!window.ok) throw new Error(window.message);
+
+      const paid = transaction.payments.reduce((sum, payment) => sum + payment.amount, 0);
+      const refundCheck = canRefund(paid, refundAmount);
+      if (!refundCheck.ok) throw new Error(refundCheck.message);
+
+      const now = new Date();
+      await tx.transaction.update({
+        where: { id },
         data: {
           status: "batal",
-          voidedAt: new Date(),
+          voidedAt: now,
+          voidedDate: parseDateOnly(today),
+          voidedById: user.id,
           voidReason: reason.slice(0, 300),
         },
       });
-      if (changed.count !== 1) throw new Error("Transaksi sudah dibatalkan atau memiliki pembayaran.");
+      if (refundAmount > 0) {
+        await tx.refund.create({
+          data: {
+            transactionId: id,
+            amount: refundAmount,
+            method: refundMethod,
+            notes: `Refund pembatalan ${transaction.invoiceNo}`,
+            businessDate: parseDateOnly(today),
+            refundedAt: now,
+            createdById: user.id,
+          },
+        });
+      }
       for (const line of [...transaction.items].sort((a, b) => (a.itemId ?? 0) - (b.itemId ?? 0))) {
         if (line.itemId && line.category === "sparepart") {
           await returnStock(tx, { ...line, itemId: line.itemId }, {
@@ -276,16 +318,72 @@ export async function voidTransactionAction(_prev: ActionState, formData: FormDa
           });
         }
       }
+      await tx.voidRequest.updateMany({
+        where: { transactionId: id, status: "pending" },
+        data: { status: "disetujui", reviewedById: user.id, reviewedAt: now },
+      });
+      itemIds = transaction.items.map((line) => line.itemId);
     });
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Gagal membatalkan transaksi." };
   }
 
-  revalidatePath("/");
-  revalidatePath("/transaksi");
+  revalidateVoid(id, itemIds);
+  return {
+    ok: true,
+    message: refundAmount > 0
+      ? "Transaksi dibatalkan, refund dicatat, dan stok dikembalikan."
+      : "Transaksi dibatalkan dan stok dikembalikan.",
+  };
+}
+
+// Kasir mengajukan pembatalan; pemilik memutuskan refund saat menyetujui.
+export async function requestVoidAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  if (user.role === "owner") return { ok: false, message: "Pemilik dapat langsung membatalkan transaksi." };
+  const id = String(formData.get("transactionId") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) return { ok: false, message: "Alasan pembatalan wajib diisi." };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Kunci baris nota agar dua pengajuan bersamaan tidak sama-sama lolos.
+      await tx.$queryRaw`SELECT id FROM transactions WHERE id = ${id} FOR UPDATE`;
+      const transaction = await tx.transaction.findUnique({ where: { id }, select: { status: true, businessDate: true } });
+      if (!transaction) throw new Error("Transaksi tidak ditemukan.");
+      if (transaction.status === "batal") throw new Error("Transaksi sudah dibatalkan.");
+      const window = voidWindowCheck(dateOnlyToISO(transaction.businessDate), todayISO(), await getVoidMaxDays(tx));
+      if (!window.ok) throw new Error(window.message);
+      const pending = await tx.voidRequest.count({ where: { transactionId: id, status: "pending" } });
+      if (pending > 0) throw new Error("Pengajuan pembatalan untuk nota ini masih menunggu persetujuan.");
+      await tx.voidRequest.create({
+        data: { transactionId: id, reason: reason.slice(0, 300), requestedById: user.id },
+      });
+    });
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Gagal mengajukan pembatalan." };
+  }
+
+  revalidatePath("/", "layout");
   revalidatePath(`/transaksi/${id}`);
-  revalidatePath("/laporan");
-  revalidatePath("/stok");
-  for (const line of transaction.items) if (line.itemId) revalidatePath(`/stok/${line.itemId}`);
-  return { ok: true, message: "Transaksi dibatalkan dan stok dikembalikan." };
+  return { ok: true, message: "Pengajuan pembatalan dikirim ke pemilik." };
+}
+
+export async function rejectVoidRequestAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const user = await requireOwner();
+  const requestId = Number(formData.get("requestId"));
+  const note = String(formData.get("note") ?? "").trim();
+  if (!Number.isInteger(requestId) || requestId <= 0) return { ok: false, message: "Pengajuan tidak valid." };
+
+  const request = await prisma.voidRequest.findUnique({ where: { id: requestId }, select: { transactionId: true } });
+  if (!request) return { ok: false, message: "Pengajuan tidak ditemukan." };
+  const changed = await prisma.voidRequest.updateMany({
+    where: { id: requestId, status: "pending" },
+    data: { status: "ditolak", reviewedById: user.id, reviewedAt: new Date(), reviewNote: note.slice(0, 300) || null },
+  });
+  if (changed.count !== 1) return { ok: false, message: "Pengajuan sudah diproses." };
+
+  revalidatePath("/", "layout");
+  revalidatePath(`/transaksi/${request.transactionId}`);
+  return { ok: true, message: "Pengajuan pembatalan ditolak." };
 }

@@ -16,6 +16,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         user={user}
         outstandingCount={summary.outstanding}
         lowStockCount={summary.lowStock}
+        voidRequestCount={user.role === "owner" ? summary.voidRequests : 0}
       />
       <div className="min-h-dvh lg:pl-[268px]">
         <MobileHeader user={user} today={summary.today} overdueCount={summary.overdue} />
@@ -24,7 +25,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </div>
-      <BottomNav outstandingCount={summary.overdue} />
+      <BottomNav outstandingCount={summary.overdue} voidRequestCount={user.role === "owner" ? summary.voidRequests : 0} />
     </div>
   );
 }

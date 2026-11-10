@@ -4,13 +4,16 @@ import {
   allocateDiscount,
   calculateTransactionTotals,
   canAcceptPayment,
+  canRefund,
   generateInvoiceNumber,
   growth,
   marginByCategory,
   normalizePhoneForWhatsApp,
+  parseVoidMaxDays,
   paymentStatus,
   remainingAmount,
   settledReceivable,
+  voidWindowCheck,
 } from "@/lib/calculations";
 
 describe("calculateTransactionTotals", () => {
@@ -144,5 +147,31 @@ describe("settledReceivable", () => {
 
   it("mengabaikan nota yang masih ada sisa", () => {
     expect(settledReceivable(50_000, "2026-11-09", [{ amount: 20_000, method: "tunai", businessDate: "2026-11-10" }])).toBeNull();
+  });
+});
+
+describe("aturan pembatalan nota", () => {
+  it("membaca batas hari pembatalan dari setting", () => {
+    expect(parseVoidMaxDays("7")).toBe(7);
+    expect(parseVoidMaxDays("0")).toBeNull();
+    expect(parseVoidMaxDays("")).toBeNull();
+    expect(parseVoidMaxDays(undefined)).toBeNull();
+    expect(parseVoidMaxDays("abc")).toBeNull();
+  });
+
+  it("menolak pembatalan nota yang melewati batas hari", () => {
+    expect(voidWindowCheck("2026-11-01", "2026-11-10", null).ok).toBe(true);
+    expect(voidWindowCheck("2026-11-03", "2026-11-10", 7).ok).toBe(true);
+    const late = voidWindowCheck("2026-11-02", "2026-11-10", 7);
+    expect(late.ok).toBe(false);
+    expect(late.message).toContain("8 hari");
+  });
+
+  it("membatasi refund antara nol dan jumlah yang sudah dibayar", () => {
+    expect(canRefund(50_000, 0).ok).toBe(true);
+    expect(canRefund(50_000, 20_000).ok).toBe(true);
+    expect(canRefund(50_000, 50_000).ok).toBe(true);
+    expect(canRefund(50_000, 50_001).ok).toBe(false);
+    expect(canRefund(50_000, -1).ok).toBe(false);
   });
 });

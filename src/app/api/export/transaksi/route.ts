@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const q = url.searchParams.get("q") ?? "";
   const statusParam = url.searchParams.get("status") ?? "semua";
-  const status: TransaksiStatusFilter = ["semua", "lunas", "sebagian", "belum_bayar"].includes(statusParam)
+  const status: TransaksiStatusFilter = ["semua", "lunas", "sebagian", "belum_bayar", "batal", "pengajuan"].includes(statusParam)
     ? (statusParam as TransaksiStatusFilter)
     : "semua";
 

@@ -81,8 +81,8 @@ export default async function SettingsPage() {
                 dan membatalkan transaksi.
               </p>
               <p>
-                <span className="font-bold text-ink">Kasir</span> dapat membuat transaksi, mencatat pembayaran, dan
-                mengelola pelanggan.
+                <span className="font-bold text-ink">Kasir</span> dapat membuat transaksi, mencatat pembayaran,
+                mengelola pelanggan, dan mengajukan pembatalan nota ke pemilik.
               </p>
             </div>
             <div className="mt-3 rounded-lg bg-[#faf7f1] px-3 py-2 text-[9px] font-medium text-faint">

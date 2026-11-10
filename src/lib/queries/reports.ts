@@ -4,6 +4,7 @@ import { openTransactionRecords } from "./mappers";
 import { listTransactionInclude } from "./mappers";
 import type { ReportData } from "../types";
 import { marginByCategory } from "../calculations";
+import { getCancellationIncome, getRefundsByDate } from "./voids";
 
 function previousMonth(month: string): string {
   const [year, monthNumber] = month.split("-").map(Number);
@@ -25,6 +26,8 @@ export async function getMonthlyReport(month: string): Promise<ReportData> {
     payments,
     payableCashOutAggregate,
     openRecords,
+    refunds,
+    cancellationIncome,
   ] = await Promise.all([
     prisma.transaction.findMany({
       where: { status: "selesai", businessDate: { gte: startDate, lte: endDate } },
@@ -63,6 +66,8 @@ export async function getMonthlyReport(month: string): Promise<ReportData> {
       where: { status: "selesai" },
       include: listTransactionInclude,
     }),
+    getRefundsByDate(startDate, endDate),
+    getCancellationIncome(startDate, endDate),
   ]);
 
   const revenue = transactions.reduce((sum, transaction) => sum + transaction.total, 0);
@@ -88,6 +93,10 @@ export async function getMonthlyReport(month: string): Promise<ReportData> {
   for (const payment of payments) {
     const key = dateOnlyToISO(payment.businessDate);
     dailyCashMap.set(key, (dailyCashMap.get(key) ?? 0) + payment.amount);
+  }
+  // Kas harian bersih dari pelanggan: pembayaran − refund.
+  for (const [key, amount] of refunds.byDate) {
+    dailyCashMap.set(key, (dailyCashMap.get(key) ?? 0) - amount);
   }
 
   const dayCount = Number(end.slice(8, 10));
@@ -170,10 +179,12 @@ export async function getMonthlyReport(month: string): Promise<ReportData> {
     grossProfit: revenue - cogs,
     expenses: totalExpenses,
     previousExpenses: previousExpensesAggregate._sum.amount ?? 0,
-    netProfit: revenue - cogs - totalExpenses,
+    netProfit: revenue - cogs - totalExpenses + cancellationIncome,
+    cancellationIncome,
+    refunds: refunds.total,
     cashIn,
-    cashOut: totalExpenses + payableCashOut,
-    netCash: cashIn - totalExpenses - payableCashOut,
+    cashOut: totalExpenses + payableCashOut + refunds.total,
+    netCash: cashIn - totalExpenses - payableCashOut - refunds.total,
     outstanding,
     overdue,
     daily,

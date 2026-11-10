@@ -34,6 +34,17 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     [],
     ["CATATAN", transaction.notes ?? ""],
     ["Dibuat oleh", transaction.createdByName],
+    ...(transaction.status === "batal"
+      ? [
+          [],
+          ["DIBATALKAN"],
+          ["Tanggal batal", transaction.voidedDate ? formatDateID(transaction.voidedDate) : ""],
+          ["Dibatalkan oleh", transaction.voidedByName ?? ""],
+          ["Alasan", transaction.voidReason ?? ""],
+          ["Refund", transaction.refunded],
+          ["Pendapatan pembatalan", Math.max(0, transaction.paid - transaction.refunded)],
+        ]
+      : []),
   ];
 
   return csvResponse(`nota-${transaction.invoiceNo}.csv`, toCsv(rows));

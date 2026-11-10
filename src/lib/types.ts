@@ -1,5 +1,5 @@
 export type PaymentStatus = "lunas" | "sebagian" | "belum_bayar" | "batal";
-export type TransaksiStatusFilter = "semua" | "lunas" | "sebagian" | "belum_bayar";
+export type TransaksiStatusFilter = "semua" | "lunas" | "sebagian" | "belum_bayar" | "batal" | "pengajuan";
 export type ReceivableFilter = "semua" | "jatuh_tempo" | "lancar";
 
 export type Vehicle = {
@@ -64,6 +64,7 @@ export type TransactionListRow = {
   createdAt: string;
   status: "selesai" | "batal";
   paymentStatus: PaymentStatus;
+  hasPendingVoid: boolean;
 };
 
 export type SettlementPayment = {
@@ -111,7 +112,35 @@ export type TransactionDetail = TransactionListRow & {
   payments: Payment[];
   createdByName: string;
   voidedAt: string | null;
+  voidedDate: string | null;
+  voidedByName: string | null;
   voidReason: string | null;
+  refunds: Refund[];
+  refunded: number;
+  voidRequests: VoidRequest[];
+};
+
+export type Refund = {
+  id: number;
+  amount: number;
+  method: "tunai" | "transfer" | "qris";
+  notes: string | null;
+  businessDate: string;
+  refundedAt: string;
+  createdByName: string;
+};
+
+export type VoidRequestStatus = "pending" | "disetujui" | "ditolak";
+
+export type VoidRequest = {
+  id: number;
+  reason: string;
+  status: VoidRequestStatus;
+  requestedByName: string;
+  requestedAt: string;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
 };
 
 export type Expense = {
@@ -218,6 +247,8 @@ export type ReportData = {
   expenses: number;
   previousExpenses: number;
   netProfit: number;
+  cancellationIncome: number;
+  refunds: number;
   cashIn: number;
   cashOut: number;
   netCash: number;

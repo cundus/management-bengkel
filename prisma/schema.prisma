@@ -33,6 +33,12 @@ enum TransactionStatus {
   batal
 }
 
+enum VoidRequestStatus {
+  pending
+  disetujui
+  ditolak
+}
+
 // Arah ditentukan oleh tanda qty: positif masuk, negatif keluar.
 enum StockMovementType {
   saldo_awal
@@ -43,20 +49,24 @@ enum StockMovementType {
 }
 
 model User {
-  id              Int              @id @default(autoincrement())
-  name            String
-  email           String           @unique
-  username        String?          @unique
-  passwordHash    String           @map("password_hash")
-  role            UserRole
-  createdAt       DateTime         @default(now()) @map("created_at")
-  transactions    Transaction[]    @relation("TransactionCreator")
-  payments        Payment[]        @relation("PaymentReceiver")
-  expenses        Expense[]        @relation("ExpenseCreator")
-  payables        Payable[]        @relation("PayableCreator")
-  payablePayments PayablePayment[] @relation("PayablePaymentCreator")
-  purchases       Purchase[]
-  stockMovements  StockMovement[]
+  id                   Int              @id @default(autoincrement())
+  name                 String
+  email                String           @unique
+  username             String?          @unique
+  passwordHash         String           @map("password_hash")
+  role                 UserRole
+  createdAt            DateTime         @default(now()) @map("created_at")
+  transactions         Transaction[]    @relation("TransactionCreator")
+  payments             Payment[]        @relation("PaymentReceiver")
+  expenses             Expense[]        @relation("ExpenseCreator")
+  payables             Payable[]        @relation("PayableCreator")
+  payablePayments      PayablePayment[] @relation("PayablePaymentCreator")
+  purchases            Purchase[]
+  stockMovements       StockMovement[]
+  voidedTransactions   Transaction[]    @relation("TransactionVoider")
+  refunds              Refund[]         @relation("RefundCreator")
+  voidRequests         VoidRequest[]    @relation("VoidRequester")
+  reviewedVoidRequests VoidRequest[]    @relation("VoidReviewer")
 
   @@map("users")
 }
@@ -130,15 +140,22 @@ model Transaction {
   createdAt      DateTime          @default(now()) @map("created_at")
   voidedAt       DateTime?         @map("voided_at")
   voidReason     String?           @map("void_reason")
+  // Tanggal bisnis pembatalan; pendapatan pembatalan (bayar − refund) diakui di tanggal ini.
+  voidedDate     DateTime?         @map("voided_date") @db.Date
+  voidedById     Int?              @map("voided_by")
+  voidedBy       User?             @relation("TransactionVoider", fields: [voidedById], references: [id])
   customer       Customer          @relation(fields: [customerId], references: [id])
   vehicle        Vehicle?          @relation(fields: [vehicleId], references: [id])
   createdBy      User              @relation("TransactionCreator", fields: [createdById], references: [id])
   items          TransactionItem[]
   payments       Payment[]
   stockMovements StockMovement[]
+  refunds        Refund[]
+  voidRequests   VoidRequest[]
 
   @@index([businessDate])
   @@index([customerId])
+  @@index([voidedDate])
   @@index([dueDate])
   @@index([createdAt])
   @@map("transactions")
@@ -229,6 +246,45 @@ model Payment {
   @@index([transactionId])
   @@index([businessDate])
   @@map("payments")
+}
+
+// Uang yang dikembalikan ke pelanggan saat nota dibatalkan. Pembayaran asli tidak dihapus
+// agar kas hari pembayaran tetap; refund menjadi kas keluar di tanggal bisnisnya.
+model Refund {
+  id            Int           @id @default(autoincrement())
+  transactionId String        @map("transaction_id")
+  amount        Int
+  method        PaymentMethod
+  notes         String?
+  businessDate  DateTime      @map("business_date") @db.Date
+  refundedAt    DateTime      @default(now()) @map("refunded_at")
+  createdById   Int           @map("created_by")
+  transaction   Transaction   @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  createdBy     User          @relation("RefundCreator", fields: [createdById], references: [id])
+
+  @@index([transactionId])
+  @@index([businessDate])
+  @@map("refunds")
+}
+
+// Pengajuan pembatalan oleh kasir; pemilik menyetujui (menjalankan pembatalan) atau menolak.
+model VoidRequest {
+  id            Int               @id @default(autoincrement())
+  transactionId String            @map("transaction_id")
+  reason        String
+  status        VoidRequestStatus @default(pending)
+  requestedById Int               @map("requested_by")
+  requestedAt   DateTime          @default(now()) @map("requested_at")
+  reviewedById  Int?              @map("reviewed_by")
+  reviewedAt    DateTime?         @map("reviewed_at")
+  reviewNote    String?           @map("review_note")
+  transaction   Transaction       @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  requestedBy   User              @relation("VoidRequester", fields: [requestedById], references: [id])
+  reviewedBy    User?             @relation("VoidReviewer", fields: [reviewedById], references: [id])
+
+  @@index([transactionId])
+  @@index([status])
+  @@map("void_requests")
 }
 
 model Expense {

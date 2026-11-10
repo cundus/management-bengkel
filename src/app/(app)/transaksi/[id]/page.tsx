@@ -11,19 +11,26 @@ import {
   MessageCircle,
   Phone,
   ReceiptText,
+  RotateCcw,
   ShieldCheck,
+  Undo2,
   User,
   Wrench,
 } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { getTransactionById } from "@/lib/queries/transactions";
 import { getSettings } from "@/lib/queries/finance";
-import { dueLabel, formatDateID, formatDateTimeID } from "@/lib/dates";
+import { dueLabel, formatDateID, formatDateTimeID, todayISO } from "@/lib/dates";
+import { parseVoidMaxDays, voidWindowCheck } from "@/lib/calculations";
 import { formatPhoneForWhatsApp, formatRupiah } from "@/lib/format";
 import { PaymentBadge, DueBadge } from "@/components/ui/status-badge";
 import { PrintButton } from "@/components/transactions/print-button";
 import { PaymentForm } from "@/components/transactions/payment-form";
-import { VoidTransactionButton } from "@/components/transactions/void-form";
+import {
+  RejectVoidRequestButton,
+  RequestVoidButton,
+  VoidTransactionButton,
+} from "@/components/transactions/void-form";
 import { Avatar } from "@/components/ui/avatar";
 import { Check } from "lucide-react";
 
@@ -50,7 +57,14 @@ export default async function TransactionDetailPage({
       transaction.remaining,
     )}${transaction.dueDate ? ` dengan jatuh tempo ${formatDateID(transaction.dueDate)}` : ""}. Terima kasih.`,
   );
-  const canVoid = user.role === "owner" && transaction.payments.length === 0 && transaction.status !== "batal";
+  const active = transaction.status === "selesai";
+  const voidWindow = voidWindowCheck(transaction.businessDate, todayISO(), parseVoidMaxDays(settings.void_max_days));
+  const pendingRequest = transaction.voidRequests.find((request) => request.status === "pending") ?? null;
+  const lastRequest = transaction.voidRequests[0] ?? null;
+  const canVoid = user.role === "owner" && active && voidWindow.ok;
+  const canRequestVoid = user.role === "kasir" && active && voidWindow.ok && !pendingRequest;
+  const hasSparepart = transaction.items.some((item) => item.category === "sparepart" && item.itemId != null);
+  const retained = Math.max(0, transaction.paid - transaction.refunded);
   const paidPercent = Math.min(100, Math.round((transaction.paid / Math.max(transaction.total, 1)) * 100));
 
   return (
@@ -85,11 +99,67 @@ export default async function TransactionDetailPage({
               transactionId={transaction.id}
               invoiceNo={transaction.invoiceNo}
               total={transaction.total}
-              hasSparepart={transaction.items.some((item) => item.category === "sparepart" && item.itemId != null)}
+              paid={transaction.paid}
+              hasSparepart={hasSparepart}
             />
+          )}
+          {canRequestVoid && (
+            <RequestVoidButton transactionId={transaction.id} invoiceNo={transaction.invoiceNo} total={transaction.total} />
           )}
         </div>
       </div>
+
+      {active && pendingRequest && (
+        <div className="no-print mb-4 flex flex-col gap-3 rounded-2xl border border-warning/25 bg-warning-soft px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2.5">
+            <Undo2 size={16} className="mt-0.5 shrink-0 text-warning" />
+            <div>
+              <p className="text-[12px] font-extrabold text-ink">
+                {user.role === "owner"
+                  ? "Kasir mengajukan pembatalan nota ini"
+                  : "Pengajuan pembatalan menunggu persetujuan pemilik"}
+              </p>
+              <p className="mt-0.5 text-[10.5px] font-medium text-muted">
+                &ldquo;{pendingRequest.reason}&rdquo; · {pendingRequest.requestedByName} ·{" "}
+                {formatDateTimeID(pendingRequest.requestedAt)} WIB
+              </p>
+              {user.role === "owner" && !voidWindow.ok && (
+                <p className="mt-1 text-[10px] font-semibold text-danger">{voidWindow.message}</p>
+              )}
+            </div>
+          </div>
+          {user.role === "owner" && (
+            <div className="flex shrink-0 items-center gap-2">
+              <RejectVoidRequestButton requestId={pendingRequest.id} invoiceNo={transaction.invoiceNo} />
+              {voidWindow.ok && (
+                <VoidTransactionButton
+                  transactionId={transaction.id}
+                  invoiceNo={transaction.invoiceNo}
+                  total={transaction.total}
+                  paid={transaction.paid}
+                  hasSparepart={hasSparepart}
+                  defaultReason={pendingRequest.reason}
+                  approving
+                />
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {active && !pendingRequest && lastRequest?.status === "ditolak" && (
+        <div className="no-print mb-4 flex items-start gap-2.5 rounded-2xl border border-line bg-[#fbf9f4] px-4 py-3">
+          <Undo2 size={16} className="mt-0.5 shrink-0 text-faint" />
+          <div>
+            <p className="text-[12px] font-extrabold text-ink">Pengajuan pembatalan ditolak</p>
+            <p className="mt-0.5 text-[10.5px] font-medium text-muted">
+              {lastRequest.reviewedByName ?? "Pemilik"}
+              {lastRequest.reviewedAt ? ` · ${formatDateTimeID(lastRequest.reviewedAt)} WIB` : ""}
+              {lastRequest.reviewNote ? ` · ${lastRequest.reviewNote}` : ""}
+            </p>
+          </div>
+        </div>
+      )}
 
       {created === "1" && (
         <div className="no-print mb-4 flex items-start gap-2.5 rounded-2xl border border-success/20 bg-success-soft px-4 py-3">
@@ -104,7 +174,17 @@ export default async function TransactionDetailPage({
       )}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
-        <div className="card overflow-hidden print:border-0">
+        <div className="card relative overflow-hidden print:border-0">
+          {transaction.status === "batal" && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden"
+            >
+              <span className="-rotate-[24deg] rounded-2xl border-[6px] border-danger/25 px-8 py-2 font-display text-[4.5rem] font-extrabold tracking-[0.2em] text-danger/20 sm:text-[6rem]">
+                BATAL
+              </span>
+            </div>
+          )}
           <div className="relative overflow-hidden border-b border-line bg-[#fbf9f4] px-5 py-6 sm:px-8 sm:py-7">
             <div className="pointer-events-none absolute -right-10 -top-12 size-40 rounded-full border-[22px] border-brand/10" />
             <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-start">
@@ -129,7 +209,7 @@ export default async function TransactionDetailPage({
                 <div className="mt-1 font-mono text-[13px] font-extrabold text-ink">{transaction.invoiceNo}</div>
                 <div className="mt-2 flex items-center gap-1.5 sm:justify-end">
                   <PaymentBadge status={transaction.paymentStatus} />
-                  {transaction.status === "batal" && <span className="badge-neutral">Void</span>}
+                  {transaction.status === "batal" && <span className="badge-danger">Dibatalkan</span>}
                 </div>
                 <div className="mt-2 text-[9.5px] font-medium text-faint">
                   {formatDateTimeID(transaction.createdAt)} WIB
@@ -346,8 +426,30 @@ export default async function TransactionDetailPage({
                 </div>
               </div>
             ) : (
-              <div className="mt-5 rounded-xl bg-[#f2eee6] px-3.5 py-3 text-[10.5px] font-semibold text-muted">
-                Transaksi dibatalkan{transaction.voidReason ? `: ${transaction.voidReason}` : "."}
+              <div className="mt-5 space-y-2 rounded-xl bg-[#f2eee6] px-3.5 py-3 text-[10.5px] text-muted">
+                <p className="font-semibold">
+                  Transaksi dibatalkan{transaction.voidReason ? `: ${transaction.voidReason}` : "."}
+                </p>
+                {(transaction.voidedByName || transaction.voidedAt) && (
+                  <p className="text-[9.5px] text-faint">
+                    {transaction.voidedByName ? `Oleh ${transaction.voidedByName}` : ""}
+                    {transaction.voidedAt ? ` · ${formatDateTimeID(transaction.voidedAt)} WIB` : ""}
+                  </p>
+                )}
+                {transaction.paid > 0 && (
+                  <div className="space-y-1 border-t border-line pt-2">
+                    <div className="flex justify-between">
+                      <span>Dikembalikan ke pelanggan</span>
+                      <span className="font-extrabold text-danger tabular">{formatRupiah(transaction.refunded)}</span>
+                    </div>
+                    {retained > 0 && (
+                      <div className="flex justify-between">
+                        <span>Pendapatan pembatalan</span>
+                        <span className="font-extrabold text-ink tabular">{formatRupiah(retained)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -362,6 +464,28 @@ export default async function TransactionDetailPage({
             <h2 className="mb-3 flex items-center gap-2 text-[12px] font-extrabold text-ink">
               <ReceiptText size={14} className="text-muted" /> Riwayat pembayaran
             </h2>
+            {transaction.refunds.length > 0 && (
+              <div className="mb-4 space-y-3 border-b border-line pb-4">
+                {transaction.refunds.map((refund) => (
+                  <div key={refund.id} className="flex gap-3">
+                    <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-danger-soft text-danger">
+                      <RotateCcw size={12} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-[11px] font-extrabold text-danger tabular">
+                          −{formatRupiah(refund.amount)}
+                        </span>
+                        <span className="text-[9px] font-semibold capitalize text-faint">Refund · {refund.method}</span>
+                      </div>
+                      <div className="mt-0.5 text-[9px] font-medium text-faint">
+                        {formatDateID(refund.businessDate)} · oleh {refund.createdByName}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             {transaction.payments.length === 0 ? (
               <p className="rounded-xl border border-dashed border-line px-3 py-5 text-center text-[10px] text-faint">
                 Belum ada pembayaran.

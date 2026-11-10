@@ -7,6 +7,7 @@ export const listTransactionInclude = {
   customer: true,
   vehicle: true,
   payments: { select: { amount: true } },
+  voidRequests: { where: { status: "pending" }, select: { id: true } },
 } satisfies Prisma.TransactionInclude;
 
 export type ListTransactionRecord = Prisma.TransactionGetPayload<{
@@ -26,12 +27,13 @@ export function mapTransactionList(record: ListTransactionRecord): TransactionLi
     mechanic: record.mechanic,
     total: record.total,
     paid,
-    remaining: remainingAmount(record.total, paid),
+    remaining: record.status === "batal" ? 0 : remainingAmount(record.total, paid),
     dueDate: record.dueDate ? dateOnlyToISO(record.dueDate) : null,
     businessDate: dateOnlyToISO(record.businessDate),
     createdAt: dateTimeToISO(record.createdAt),
     status: record.status,
     paymentStatus: paymentStatus(record.total, paid, record.status),
+    hasPendingVoid: record.voidRequests.length > 0,
   };
 }
 

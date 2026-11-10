@@ -25,7 +25,7 @@ export async function listTransactions(options: {
   const pageSize = options.pageSize ?? 20;
   const page = Math.max(1, options.page ?? 1);
 
-  const where: Prisma.TransactionWhereInput = search
+  const searchWhere: Prisma.TransactionWhereInput = search
     ? {
         OR: [
           { invoiceNo: { contains: search, mode: "insensitive" } },
@@ -37,6 +37,8 @@ export async function listTransactions(options: {
         ],
       }
     : {};
+  const where: Prisma.TransactionWhereInput =
+    status === "pengajuan" ? { ...searchWhere, status: "selesai", voidRequests: { some: { status: "pending" } } } : searchWhere;
 
   const records = await prisma.transaction.findMany({
     where,
@@ -50,6 +52,7 @@ export async function listTransactions(options: {
       if (status === "lunas") return row.paymentStatus === "lunas";
       if (status === "belum_bayar") return row.paymentStatus === "belum_bayar";
       if (status === "sebagian") return row.paymentStatus === "sebagian";
+      if (status === "batal") return row.status === "batal";
       return true;
     });
 
@@ -69,6 +72,12 @@ export async function getTransactionById(id: string): Promise<TransactionDetail 
       customer: true,
       vehicle: true,
       createdBy: true,
+      voidedBy: { select: { name: true } },
+      refunds: { include: { createdBy: { select: { name: true } } }, orderBy: { refundedAt: "desc" } },
+      voidRequests: {
+        include: { requestedBy: { select: { name: true } }, reviewedBy: { select: { name: true } } },
+        orderBy: { requestedAt: "desc" },
+      },
       items: { orderBy: { id: "asc" }, include: { stockBatch: { select: { code: true } } } },
       payments: { include: { receivedBy: true }, orderBy: { paidAt: "desc" } },
     },
@@ -124,19 +133,42 @@ export async function getTransactionById(id: string): Promise<TransactionDetail 
     discount: record.discount,
     total: record.total,
     paid,
-    remaining: remainingAmount(record.total, paid),
+    remaining: record.status === "batal" ? 0 : remainingAmount(record.total, paid),
     dueDate: record.dueDate ? dateOnlyToISO(record.dueDate) : null,
     businessDate: dateOnlyToISO(record.businessDate),
     createdAt: dateTimeToISO(record.createdAt),
     status: record.status,
     paymentStatus: paymentStatus(record.total, paid, record.status),
+    hasPendingVoid: record.voidRequests.some((request) => request.status === "pending"),
     notes: record.notes,
     vehicle,
     items,
     payments,
     createdByName: record.createdBy.name,
     voidedAt: record.voidedAt ? dateTimeToISO(record.voidedAt) : null,
+    voidedDate: record.voidedDate ? dateOnlyToISO(record.voidedDate) : null,
+    voidedByName: record.voidedBy?.name ?? null,
     voidReason: record.voidReason,
+    refunds: record.refunds.map((refund) => ({
+      id: refund.id,
+      amount: refund.amount,
+      method: refund.method,
+      notes: refund.notes,
+      businessDate: dateOnlyToISO(refund.businessDate),
+      refundedAt: dateTimeToISO(refund.refundedAt),
+      createdByName: refund.createdBy.name,
+    })),
+    refunded: record.refunds.reduce((sum, refund) => sum + refund.amount, 0),
+    voidRequests: record.voidRequests.map((request) => ({
+      id: request.id,
+      reason: request.reason,
+      status: request.status,
+      requestedByName: request.requestedBy.name,
+      requestedAt: dateTimeToISO(request.requestedAt),
+      reviewedByName: request.reviewedBy?.name ?? null,
+      reviewedAt: request.reviewedAt ? dateTimeToISO(request.reviewedAt) : null,
+      reviewNote: request.reviewNote,
+    })),
   };
 }
 
@@ -206,6 +238,7 @@ export async function getSettledReceivables(options: { search?: string; limit?: 
     include: {
       customer: true,
       vehicle: true,
+      voidRequests: { where: { status: "pending" }, select: { id: true } },
       payments: {
         select: { amount: true, method: true, businessDate: true },
         orderBy: [{ businessDate: "asc" }, { paidAt: "asc" }],

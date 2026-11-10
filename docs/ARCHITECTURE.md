@@ -74,7 +74,9 @@ sequenceDiagram
 | Stok tidak negatif | `updateMany WHERE stock >= qty` + rollback | unit + E2E |
 | Nomor invoice unik | UNIQUE constraint + sequence di transaksi | database test |
 | Nota batal tidak bisa dibayar | guard pembayaran | E2E |
-| Nota dengan pembayaran tidak bisa di-void | guard action | E2E |
+| Refund ≤ total yang sudah dibayar; pembayaran lama tidak dihapus | `canRefund()` + action | `void-transactions.test.ts` |
+| Satu pengajuan pembatalan pending per nota | `FOR UPDATE` pada nota | `void-transactions.test.ts` |
+| Pembatalan dibatasi `void_max_days` (opsional) | `voidWindowCheck()` | unit test |
 | Status bayar diturunkan, tidak diketik | `paymentStatus()` | unit test |
 
 ## Status pembayaran (derived state)
@@ -105,11 +107,15 @@ Sepuluh model inti:
 | `Transaction` | Header nota, nomor invoice, tanggal bisnis, jatuh tempo, void. |
 | `TransactionItem` | Snapshot nama/harga/modal/qty saat transaksi. |
 | `Payment` | Penerimaan pembayaran per nota; sumber laporan kas. |
+| `Refund` | Uang dikembalikan saat nota dibatalkan; kas keluar di tanggal bisnisnya. |
+| `VoidRequest` | Pengajuan pembatalan oleh kasir (pending/disetujui/ditolak). |
 | `Expense` | Pengeluaran operasional. |
 | `Supplier`, `Payable`, `PayablePayment` | Hutang usaha dan pembayarannya. |
-| `Setting` | Identitas bengkel dan teks nota. |
+| `Setting` | Identitas bengkel, teks nota, dan batas pembatalan (`void_max_days`). |
 
-Enum PostgreSQL: `UserRole` (owner/kasir), `ItemCategory` (jasa/sparepart), `PaymentMethod` (tunai/transfer/qris), `TransactionStatus` (selesai/batal).
+Enum PostgreSQL: `UserRole` (owner/kasir), `ItemCategory` (jasa/sparepart), `PaymentMethod` (tunai/transfer/qris), `TransactionStatus` (selesai/batal), `VoidRequestStatus` (pending/disetujui/ditolak).
+
+Pembatalan: status `batal` + `voided_by`/`voided_date`. Kas bersih = pembayaran − refund per tanggal bisnis. Pendapatan pembatalan (bayar − refund) diakui pada `voided_date` dan masuk laba bersih.
 
 Index ada untuk tanggal bisnis, pelanggan, kendaraan, jatuh tempo, pembayaran, dan pengeluaran.
 
@@ -152,7 +158,7 @@ Omset ≠ kas diterima. Itulah inti perbaikan “pendapatan tidak rapi”: pemil
 2. JWT disimpan di cookie `wmc225_session` (`HttpOnly`, `SameSite=Lax`, `Secure` di production).
 3. Setiap request server memverifikasi JWT dan mengecek user masih ada di database.
 4. Layout `(app)` memanggil `requireUser()`; setiap action juga memanggil `requireUser()` — tidak bergantung hanya pada UI.
-5. Modul sensitif memakai `requireOwner()`: pengeluaran, hutang supplier, stok, pengaturan, void.
+5. Modul sensitif memakai `requireOwner()`: pengeluaran, hutang supplier, stok, pengaturan, void dan penolakan pengajuan void. Kasir hanya bisa mengajukan pembatalan.
 6. UI menyembunyikan menu yang tidak berhak, tetapi server tetap menjadi penjaga utama.
 
 **Belum ada:** rate limit login, MFA, audit log, dan manajemen sesi per perangkat. Lihat roadmap P1.

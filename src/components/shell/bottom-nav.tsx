@@ -22,7 +22,13 @@ const ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/lainnya", label: "Lainnya", icon: Grid2X2 },
 ];
 
-export function BottomNav({ outstandingCount = 0 }: { outstandingCount?: number }) {
+export function BottomNav({
+  outstandingCount = 0,
+  voidRequestCount = 0,
+}: {
+  outstandingCount?: number;
+  voidRequestCount?: number;
+}) {
   const pathname = usePathname();
 
   return (
@@ -56,6 +62,14 @@ export function BottomNav({ outstandingCount = 0 }: { outstandingCount?: number 
                 {item.href === "/piutang" && outstandingCount > 0 && (
                   <span className="absolute -right-0.5 -top-1 min-w-4 rounded-full bg-lime px-1 text-center text-[9px] font-extrabold leading-4 text-pine">
                     {outstandingCount > 9 ? "9+" : outstandingCount}
+                  </span>
+                )}
+                {item.href === "/transaksi" && voidRequestCount > 0 && (
+                  <span
+                    className="absolute -right-0.5 -top-1 min-w-4 rounded-full bg-warning-soft px-1 text-center text-[9px] font-extrabold leading-4 text-warning"
+                    aria-label={`${voidRequestCount} pengajuan pembatalan`}
+                  >
+                    {voidRequestCount > 9 ? "9+" : voidRequestCount}
                   </span>
                 )}
               </span>

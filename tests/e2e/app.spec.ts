@@ -97,7 +97,7 @@ test.describe("WMC 225 — alur manajemen bengkel", () => {
     await expect(page.getByText("Test biaya operasional").last()).toBeVisible();
   });
 
-  test("membatalkan nota yang belum dibayar", async ({ page }) => {
+  test("membatalkan nota yang sudah dibayar dengan refund sebagian", async ({ page }) => {
     await page.goto("/transaksi/baru");
     const customerOption = page.locator("#customerId option").filter({ hasText: "Nina Wulandari" });
     const customerValue = await customerOption.getAttribute("value");
@@ -107,10 +107,64 @@ test.describe("WMC 225 — alur manajemen bengkel", () => {
     await page.getByRole("button", { name: /Simpan & buka nota/ }).click();
     await page.waitForURL(/\/transaksi\/[0-9a-f-]{36}/, { timeout: 30_000 });
 
-    await page.getByText("Batalkan transaksi").click();
-    await page.locator("#void-reason").fill("Salah input saat pengujian");
-    await page.getByRole("button", { name: /Konfirmasi pembatalan/ }).click();
+    await page.locator("#payment-amount").fill("10000");
+    await page.getByRole("button", { name: /Catat pembayaran/ }).click();
+    await expect(page.getByText("Pembayaran berhasil dicatat.")).toBeVisible();
+
+    await page.getByRole("button", { name: "Batalkan transaksi" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.locator("#void-reason").fill("Salah input saat pengujian");
+    await dialog.locator("#refund-amount").fill("6000");
+    await expect(dialog.getByText("pendapatan pembatalan")).toBeVisible();
+    await dialog.getByRole("button", { name: /Batalkan nota/ }).click();
+
     await expect(page.getByText("Transaksi dibatalkan", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("Dikembalikan ke pelanggan")).toBeVisible();
+    await expect(page.getByText("Pendapatan pembatalan")).toBeVisible();
+    await expect(page.getByText("BATAL", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Batalkan transaksi" })).toHaveCount(0);
+  });
+
+  test("kasir mengajukan pembatalan dan pemilik menyetujui", async ({ page, browser }) => {
+    const context = await browser.newContext({
+      baseURL: "http://localhost:3100",
+      ...test.info().project.use,
+      storageState: undefined,
+    });
+    const kasir = await context.newPage();
+    await kasir.goto("/login");
+    await kasir.getByLabel("Username atau email", { exact: true }).fill("kasir");
+    await kasir.getByLabel("Kata sandi", { exact: true }).fill("wmc225");
+    await kasir.getByRole("button", { name: /Masuk ke dashboard/ }).click();
+    await kasir.waitForURL("http://localhost:3100/");
+
+    await kasir.goto("/transaksi/baru");
+    const customerValue = await kasir.locator("#customerId option").filter({ hasText: "Nina Wulandari" }).getAttribute("value");
+    await kasir.selectOption("#customerId", customerValue!);
+    await kasir.getByRole("button", { name: /Tambal Ban/ }).first().click();
+    await kasir.getByRole("button", { name: "Belum", exact: true }).click();
+    await kasir.getByRole("button", { name: /Simpan & buka nota/ }).click();
+    await kasir.waitForURL(/\/transaksi\/[0-9a-f-]{36}/, { timeout: 30_000 });
+    const notaUrl = new URL(kasir.url()).pathname;
+
+    await expect(kasir.getByRole("button", { name: "Batalkan transaksi" })).toHaveCount(0);
+    await kasir.getByRole("button", { name: "Ajukan pembatalan" }).click();
+    await kasir.locator("#request-void-reason").fill("Pelanggan batal servis");
+    await kasir.getByRole("button", { name: /Kirim pengajuan/ }).click();
+    await expect(kasir.getByText("Pengajuan pembatalan menunggu persetujuan pemilik")).toBeVisible();
+    await expect(kasir.getByRole("button", { name: "Ajukan pembatalan" })).toHaveCount(0);
+    await context.close();
+
+    await page.goto("/transaksi?status=pengajuan");
+    await expect(page.locator("text=Minta batal >> visible=true").first()).toBeVisible();
+    await page.goto(notaUrl);
+    await expect(page.getByText("Kasir mengajukan pembatalan nota ini")).toBeVisible();
+    await page.getByRole("button", { name: /Setujui & batalkan/ }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.locator("#void-reason")).toHaveValue("Pelanggan batal servis");
+    await dialog.getByRole("button", { name: /Batalkan nota/ }).click();
+    await expect(page.getByText("Transaksi dibatalkan", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("Kasir mengajukan pembatalan nota ini")).toHaveCount(0);
   });
 
   test("kasir tidak dapat membuka modul khusus pemilik", async ({ browser }) => {

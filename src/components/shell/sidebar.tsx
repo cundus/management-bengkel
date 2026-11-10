@@ -45,10 +45,12 @@ export function Sidebar({
   user,
   outstandingCount,
   lowStockCount,
+  voidRequestCount = 0,
 }: {
   user: { name: string; email: string; role: UserRole };
   outstandingCount: number;
   lowStockCount: number;
+  voidRequestCount?: number;
 }) {
   const pathname = usePathname();
   const primary = PRIMARY_NAV.filter((item) => item.href !== "/lainnya");
@@ -64,7 +66,9 @@ export function Sidebar({
         ? outstandingCount
         : item.href === "/stok" && lowStockCount > 0
           ? lowStockCount
-          : null;
+          : item.href === "/transaksi" && voidRequestCount > 0
+            ? voidRequestCount
+            : null;
     return (
       <Link
         key={item.href}
@@ -90,7 +94,11 @@ export function Sidebar({
           <span
             className={cn(
               "min-w-5 rounded-md px-1.5 py-0.5 text-center text-[10px] font-extrabold tabular",
-              item.href === "/piutang" ? "bg-brand text-white" : "bg-lime/20 text-lime",
+              item.href === "/piutang"
+                ? "bg-brand text-white"
+                : item.href === "/transaksi"
+                  ? "bg-warning-soft text-warning"
+                  : "bg-lime/20 text-lime",
             )}
           >
             {badge > 99 ? "99+" : badge}

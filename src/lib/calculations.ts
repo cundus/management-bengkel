@@ -167,3 +167,29 @@ export function settledReceivable(
     .reduce((sum, payment) => sum + payment.amount, 0);
   return { settledDate, daysToSettle: daysBetween(businessDate, settledDate), downPayment };
 }
+
+// Batas pembatalan dari setting `void_max_days`: kosong atau 0 berarti tanpa batas.
+export function parseVoidMaxDays(value: string | undefined | null): number | null {
+  const days = Math.floor(Number(value));
+  return Number.isFinite(days) && days > 0 ? days : null;
+}
+
+export function voidWindowCheck(
+  businessDate: string,
+  today: string,
+  maxDays: number | null,
+): { ok: boolean; message?: string } {
+  if (maxDays == null) return { ok: true };
+  const age = daysBetween(businessDate, today);
+  if (age > maxDays) {
+    return { ok: false, message: `Nota lebih dari ${maxDays} hari tidak bisa dibatalkan (umur nota ${age} hari).` };
+  }
+  return { ok: true };
+}
+
+// Refund boleh sebagian; sisanya (bayar − refund) diakui sebagai pendapatan pembatalan.
+export function canRefund(paid: number, amount: number): { ok: boolean; message?: string } {
+  if (!Number.isInteger(amount) || amount < 0) return { ok: false, message: "Nominal refund tidak valid." };
+  if (amount > paid) return { ok: false, message: "Refund tidak boleh melebihi jumlah yang sudah dibayar." };
+  return { ok: true };
+}

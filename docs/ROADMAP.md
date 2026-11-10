@@ -54,7 +54,7 @@ Kegiatan:
 - Nomor invoice harian berurutan (`INV-YYYYMMDD-NNN`).
 - Simpan atomik: nota + item + pembayaran + pengurangan stok dalam satu transaksi database.
 - Detail nota siap cetak, unduh CSV, tagih WhatsApp.
-- Pembatalan nota oleh pemilik (hanya jika belum ada pembayaran) + restore stok.
+- Pembatalan nota oleh pemilik (termasuk nota berbayar dengan refund penuh/sebagian) + restore stok; kasir mengajukan, pemilik menyetujui/menolak.
 
 **Exit criteria:** stok tidak negatif, total konsisten, pembayaran tidak bisa melebihi total, nota bisa dicetak.
 

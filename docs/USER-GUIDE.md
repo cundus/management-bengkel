@@ -60,10 +60,16 @@ Menu **Laporan**:
 - Rincian per hari tersedia di bagian bawah halaman.
 
 ### Pembatalan nota
-- Hanya pemilik.
-- Hanya jika **belum ada pembayaran**.
-- Buka detail nota → **Batalkan transaksi** → isi alasan.
-- Stok sparepart otomatis dikembalikan.
+- **Pemilik**: buka detail nota → **Batalkan** → isi alasan.
+  - Jika nota sudah dibayar (lunas/DP), isi **uang dikembalikan** dan metodenya. Boleh sebagian atau nol.
+  - Refund dicatat sebagai **kas keluar hari ini**; pembayaran lama tidak dihapus, jadi kas hari pembayaran tidak berubah.
+  - Sisa yang tidak dikembalikan dicatat sebagai **pendapatan pembatalan** pada tanggal pembatalan dan ikut menambah laba bersih.
+- **Kasir**: buka detail nota → **Ajukan batal** → isi alasan. Nota tetap aktif sampai pemilik memutuskan.
+  - Pemilik melihat badge di menu Transaksi dan filter **Pengajuan batal**, lalu memilih **Setujui & batalkan** (sekaligus mengisi refund) atau **Tolak** (dengan catatan).
+- Stok sparepart otomatis dikembalikan ke batch asalnya.
+- Nota batal tidak dihitung di omset dan piutang. Omset tanggal nota ikut turun meskipun dibatalkan di hari lain.
+- **Batas pembatalan** (opsional) diatur di Pengaturan → *Batas pembatalan nota (hari)*. Kosong atau 0 = tanpa batas.
+- Retur per item (membatalkan sebagian baris nota) belum tersedia.
 
 ## Peran & akses
 
@@ -75,7 +81,8 @@ Menu **Laporan**:
 | Stok (lihat & edit) | ✅ | lihat saja |
 | Pengeluaran | ✅ | ❌ |
 | Hutang supplier | ✅ | ❌ |
-| Pengaturan & void nota | ✅ | ❌ |
+| Pengaturan | ✅ | ❌ |
+| Pembatalan nota | ✅ langsung | ajukan ke pemilik |
 
 ## Tips agar catatan tetap akurat
 
@@ -83,7 +90,7 @@ Menu **Laporan**:
 2. Setiap uang masuk—termasuk DP—harus dicatat, bukan hanya pelunasan.
 3. Catat pengeluaran di hari yang sama.
 4. Lakukan pengecekan stok fisik minimal seminggu sekali; bandingkan dengan menu Stok.
-5. Jika salah input, jangan menghapus database. Untuk nota tanpa pembayaran gunakan pembatalan; untuk kasus lain hubungi pengelola sistem/lihat roadmap koreksi pembayaran.
+5. Jika salah input, jangan menghapus database. Batalkan nota (dengan refund bila perlu) lalu buat nota baru yang benar.
 6. Aktifkan backup otomatis dari provider PostgreSQL dan uji restore secara berkala (lihat DEPLOYMENT).
 
 ## Pertanyaan umum

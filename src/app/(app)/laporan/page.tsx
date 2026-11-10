@@ -200,10 +200,18 @@ export default async function ReportPage({
               <span className="font-semibold text-muted">Biaya operasional</span>
               <span className="font-semibold text-danger tabular">−{formatRupiah(report.expenses)}</span>
             </div>
+            {report.cancellationIncome > 0 && (
+              <div className="flex justify-between py-2 text-[12px]">
+                <span className="font-semibold text-muted">Pendapatan pembatalan</span>
+                <span className="font-semibold text-success tabular">+{formatRupiah(report.cancellationIncome)}</span>
+              </div>
+            )}
             <div className="mt-1 flex items-center justify-between rounded-xl bg-pine px-4 py-3.5">
               <div>
                 <div className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-white/40">Laba bersih</div>
-                <div className="mt-0.5 text-[9px] font-medium text-white/30">Pendapatan − HPP − biaya</div>
+                <div className="mt-0.5 text-[9px] font-medium text-white/30">
+                  Pendapatan − HPP − biaya{report.cancellationIncome > 0 ? " + pembatalan" : ""}
+                </div>
               </div>
               <div className="font-display text-[1.3rem] font-extrabold tracking-tight text-lime tabular">
                 {formatRupiah(report.netProfit)}
@@ -247,9 +255,15 @@ export default async function ReportPage({
               <div className="flex justify-between text-muted">
                 <span>Pembayaran hutang supplier</span>
                 <span className="font-bold text-ink tabular">
-                  {formatRupiah(Math.max(0, report.cashOut - report.expenses))}
+                  {formatRupiah(Math.max(0, report.cashOut - report.expenses - report.refunds))}
                 </span>
               </div>
+              {report.refunds > 0 && (
+                <div className="flex justify-between text-muted">
+                  <span>Refund nota batal</span>
+                  <span className="font-bold text-ink tabular">{formatRupiah(report.refunds)}</span>
+                </div>
+              )}
               <div className="flex justify-between border-t border-line pt-2.5 text-[11px]">
                 <span className="font-extrabold text-ink">Arus kas bersih</span>
                 <span className={cn("font-extrabold tabular", report.netCash >= 0 ? "text-success" : "text-danger")}>

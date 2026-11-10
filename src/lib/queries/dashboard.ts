@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { addDaysISO, dateOnlyToISO, daysBetween, lastNDates, parseDateOnly, startOfMonthISO, todayISO } from "../dates";
 import { listTransactionInclude, mapTransactionList, openTransactionRecords } from "./mappers";
 import { getLowStockItems } from "./items";
+import { getCancellationIncome, getRefundsByDate } from "./voids";
 import type { DashboardData } from "../types";
 
 async function buildDashboardData(): Promise<DashboardData> {
@@ -27,6 +28,8 @@ async function buildDashboardData(): Promise<DashboardData> {
     weeklyPayments,
     recentRecords,
     lowStock,
+    refunds,
+    monthCancellationIncome,
   ] = await Promise.all([
     prisma.transaction.findMany({
       where: { status: "selesai", businessDate: todayDate },
@@ -83,7 +86,11 @@ async function buildDashboardData(): Promise<DashboardData> {
       take: 5,
     }),
     getLowStockItems(),
+    getRefundsByDate(parseDateOnly(weekDates[0] < monthStart ? weekDates[0] : monthStart), todayDate),
+    getCancellationIncome(monthStartDate, todayDate),
   ]);
+  const refundBetween = (from: string, to: string) =>
+    [...refunds.byDate].reduce((sum, [date, amount]) => (date >= from && date <= to ? sum + amount : sum), 0);
 
   const todayRevenue = todayTransactions.reduce((sum, transaction) => sum + transaction.total, 0);
   const monthRevenue = monthTransactions.reduce((sum, transaction) => sum + transaction.total, 0);
@@ -133,6 +140,9 @@ async function buildDashboardData(): Promise<DashboardData> {
     const date = dateOnlyToISO(payment.businessDate);
     cashByDate.set(date, (cashByDate.get(date) ?? 0) + payment.amount);
   }
+  for (const [date, amount] of refunds.byDate) {
+    if (date >= weekDates[0]) cashByDate.set(date, (cashByDate.get(date) ?? 0) - amount);
+  }
 
   const dueSoon = open
     .filter((transaction) => transaction.dueDate && transaction.dueDate <= dateOnlyToISO(dueSoonLimit))
@@ -149,13 +159,13 @@ async function buildDashboardData(): Promise<DashboardData> {
   return {
     today,
     todayRevenue,
-    todayCash: todayCashAggregate._sum.amount ?? 0,
+    todayCash: (todayCashAggregate._sum.amount ?? 0) - refundBetween(today, today),
     todayTransactions: todayTransactions.length,
     yesterdayRevenue: yesterdayAggregate._sum.total ?? 0,
     monthRevenue,
-    monthCash: monthCashAggregate._sum.amount ?? 0,
+    monthCash: (monthCashAggregate._sum.amount ?? 0) - refundBetween(monthStart, today),
     monthExpenses: monthExpenseAggregate._sum.amount ?? 0,
-    monthProfit: monthRevenue - monthCogs - (monthExpenseAggregate._sum.amount ?? 0),
+    monthProfit: monthRevenue - monthCogs - (monthExpenseAggregate._sum.amount ?? 0) + monthCancellationIncome,
     receivables,
     payables,
     weekly: weekDates.map((date) => ({

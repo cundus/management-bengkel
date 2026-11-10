@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db";
-import { dateOnlyToISO, dateTimeToISO } from "../dates";
-import { paymentStatus, remainingAmount } from "../calculations";
-import { mapVehicle } from "./mappers";
+import { dateTimeToISO } from "../dates";
+import { remainingAmount } from "../calculations";
+import { listTransactionInclude, mapTransactionList, mapVehicle } from "./mappers";
 import type { Customer, CustomerDetail, CustomerWithVehicles, TransactionListRow } from "../types";
 
 function mapCustomer(customer: {
@@ -86,40 +86,14 @@ export async function getCustomerById(id: number): Promise<CustomerDetail | null
     include: {
       vehicles: { orderBy: { plateNumber: "asc" } },
       transactions: {
-        include: {
-          customer: true,
-          vehicle: true,
-          payments: { select: { amount: true } },
-        },
+        include: listTransactionInclude,
         orderBy: { createdAt: "desc" },
       },
     },
   });
   if (!customer) return null;
 
-  const transactions: TransactionListRow[] = customer.transactions.map((transaction) => {
-    const paid = transaction.payments.reduce((sum, payment) => sum + payment.amount, 0);
-    return {
-      id: transaction.id,
-      invoiceNo: transaction.invoiceNo,
-      customerId: transaction.customerId,
-      customerName: transaction.customer.name,
-      customerPhone: transaction.customer.phone,
-      plateNumber: transaction.vehicle?.plateNumber ?? null,
-      vehicleLabel: transaction.vehicle
-        ? `${transaction.vehicle.brand} ${transaction.vehicle.model}`
-        : null,
-      mechanic: transaction.mechanic,
-      total: transaction.total,
-      paid,
-      remaining: remainingAmount(transaction.total, paid),
-      dueDate: transaction.dueDate ? dateOnlyToISO(transaction.dueDate) : null,
-      businessDate: dateOnlyToISO(transaction.businessDate),
-      createdAt: dateTimeToISO(transaction.createdAt),
-      status: transaction.status,
-      paymentStatus: paymentStatus(transaction.total, paid, transaction.status),
-    };
-  });
+  const transactions: TransactionListRow[] = customer.transactions.map(mapTransactionList);
 
   return {
     ...mapCustomer(customer),

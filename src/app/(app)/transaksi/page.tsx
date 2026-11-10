@@ -20,10 +20,12 @@ const FILTERS: { value: TransaksiStatusFilter; label: string }[] = [
   { value: "lunas", label: "Lunas" },
   { value: "sebagian", label: "Sebagian" },
   { value: "belum_bayar", label: "Belum bayar" },
+  { value: "pengajuan", label: "Pengajuan batal" },
+  { value: "batal", label: "Dibatalkan" },
 ];
 
 function isStatus(value: string | undefined): value is TransaksiStatusFilter {
-  return !!value && ["semua", "lunas", "sebagian", "belum_bayar"].includes(value);
+  return !!value && FILTERS.some((filter) => filter.value === value);
 }
 
 export default async function TransactionsPage({
@@ -149,6 +151,9 @@ export default async function TransactionsPage({
                         <td>
                           <div className="font-mono text-[11px] font-bold text-ink">{row.invoiceNo}</div>
                           {row.status === "batal" && <span className="badge-neutral mt-1">Dibatalkan</span>}
+                          {row.hasPendingVoid && row.status !== "batal" && (
+                            <span className="badge-warning mt-1">Minta batal</span>
+                          )}
                         </td>
                         <td>
                           <div className="flex items-center gap-2.5">
@@ -207,7 +212,14 @@ export default async function TransactionsPage({
                       <PaymentBadge status={row.paymentStatus} compact />
                     </div>
                     <div className="mt-2 flex items-end justify-between">
-                      <span className="font-mono text-[9px] font-semibold text-faint">{row.invoiceNo}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="font-mono text-[9px] font-semibold text-faint">{row.invoiceNo}</span>
+                        {row.hasPendingVoid && row.status !== "batal" && (
+                          <span className="rounded bg-warning-soft px-1 py-0.5 text-[8.5px] font-extrabold text-warning">
+                            Minta batal
+                          </span>
+                        )}
+                      </span>
                       <div className="text-right">
                         <span className="text-[13px] font-extrabold tabular">{formatRupiah(row.total)}</span>
                         {row.remaining > 0 && (

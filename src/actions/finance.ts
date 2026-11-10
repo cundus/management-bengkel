@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireOwner } from "@/lib/auth";
+import { parseVoidMaxDays } from "@/lib/calculations";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS, type PaymentMethod } from "@/lib/constants";
 import { isValidISODate, parseDateOnly, todayISO } from "@/lib/dates";
 import { prisma } from "@/lib/db";
@@ -175,6 +176,7 @@ export async function updateSettingsAction(_prev: ActionState, formData: FormDat
     ["workshop_address", text(formData.get("workshopAddress"), 200)],
     ["workshop_tagline", text(formData.get("workshopTagline"), 160)],
     ["invoice_note", text(formData.get("invoiceNote"), 300)],
+    ["void_max_days", String(parseVoidMaxDays(String(formData.get("voidMaxDays") ?? "")) ?? "")],
   ];
   if (!entries[0][1]) return { ok: false, message: "Nama bengkel wajib diisi." };
 

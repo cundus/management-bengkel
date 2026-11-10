@@ -40,6 +40,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (itemId) await db.stockMovement.deleteMany({ where: { itemId } });
+  if (customerId) await db.refund.deleteMany({ where: { transaction: { customerId } } });
   if (customerId) await db.transaction.deleteMany({ where: { customerId } });
   if (itemId) {
     await db.stockBatch.deleteMany({ where: { itemId } });
@@ -69,6 +70,12 @@ describe("batch stok dengan PostgreSQL", () => {
       await apply("20261109040000_purchasing");
       await apply("20261110000000_stock_movements");
       expect(await tx.$queryRawUnsafe('SELECT type::text, qty, balance_after FROM stock_movements')).toEqual([{ type: "saldo_awal", qty: 7, balance_after: 7 }]);
+      await tx.$executeRawUnsafe(`INSERT INTO users (name,email,password_hash,role) VALUES ('Pemilik','o@test','x','owner')`);
+      await tx.$executeRawUnsafe(`INSERT INTO customers (name) VALUES ('Lama')`);
+      await tx.$executeRawUnsafe(`INSERT INTO transactions (id,invoice_no,customer_id,subtotal,total,business_date,status,created_by,voided_at) SELECT 'old-void','INV-OLD',c.id,0,0,'2026-11-01','batal',u.id,'2026-11-09 18:30:00' FROM customers c, users u`);
+      await apply("20261111000000_void_refunds");
+      // 18:30 UTC = 01:30 WIB keesokan harinya.
+      expect(await tx.$queryRawUnsafe(`SELECT voided_date::text AS d FROM transactions WHERE id = 'old-void'`)).toEqual([{ d: "2026-11-10" }]);
       throw new Error("rollback-migration-check");
     })).rejects.toThrow("rollback-migration-check");
   });
@@ -143,10 +150,14 @@ describe("batch stok dengan PostgreSQL", () => {
     expect((await db.item.findUniqueOrThrow({ where: { id: itemId } })).stock).toBe(before);
     const next = await sell(1);
     if (!next.ok) throw new Error(next.message);
-    const results = await Promise.all([recordPaymentAction(next.id, 1000, "tunai", ""), voidSale(next.id)]);
-    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    // Pembayaran dan pembatalan berurutan lewat kunci baris: pembayaran setelah batal ditolak,
+    // pembayaran sebelum batal tetap tersimpan (nota berbayar boleh dibatalkan).
+    const [payment, voided] = await Promise.all([recordPaymentAction(next.id, 1000, "tunai", ""), voidSale(next.id)]);
+    expect(voided.ok).toBe(true);
     const record = await db.transaction.findUniqueOrThrow({ where: { id: next.id }, include: { payments: true } });
-    expect(record.status === "batal" ? record.payments.length === 0 : record.payments.length === 1).toBe(true);
+    expect(record.status).toBe("batal");
+    expect(record.payments).toHaveLength(payment.ok ? 1 : 0);
+    if (payment.ok) expect(record.payments[0].paidAt.getTime()).toBeLessThanOrEqual(record.voidedAt!.getTime());
   });
 
   it("ledger mencatat setiap perubahan stok dengan saldo berjalan yang cocok", async () => {

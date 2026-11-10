@@ -1,10 +1,11 @@
 import { cache } from "react";
 import { prisma } from "../db";
 import { parseDateOnly, todayISO } from "../dates";
+import { countPendingVoidRequests } from "./voids";
 
 export const getNavigationSummary = cache(async () => {
   const today = todayISO();
-  const [transactions, lowStock] = await Promise.all([
+  const [transactions, lowStock, voidRequests] = await Promise.all([
     prisma.transaction.findMany({
       where: { status: "selesai" },
       select: { total: true, dueDate: true, payments: { select: { amount: true } } },
@@ -12,6 +13,7 @@ export const getNavigationSummary = cache(async () => {
     prisma.item.count({
       where: { category: "sparepart", isActive: true, stock: { lte: prisma.item.fields.minStock } },
     }),
+    countPendingVoidRequests(),
   ]);
 
   let outstanding = 0;
@@ -24,5 +26,5 @@ export const getNavigationSummary = cache(async () => {
     if (transaction.dueDate && transaction.dueDate < todayDate) overdue += 1;
   }
 
-  return { today, outstanding, overdue, lowStock };
+  return { today, outstanding, overdue, lowStock, voidRequests };
 });
