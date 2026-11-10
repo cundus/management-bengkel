@@ -23,7 +23,7 @@ import { formatPhoneForWhatsApp, formatRupiah } from "@/lib/format";
 import { PaymentBadge, DueBadge } from "@/components/ui/status-badge";
 import { PrintButton } from "@/components/transactions/print-button";
 import { PaymentForm } from "@/components/transactions/payment-form";
-import { VoidForm } from "@/components/transactions/void-form";
+import { VoidTransactionButton } from "@/components/transactions/void-form";
 import { Avatar } from "@/components/ui/avatar";
 import { Check } from "lucide-react";
 
@@ -50,6 +50,7 @@ export default async function TransactionDetailPage({
       transaction.remaining,
     )}${transaction.dueDate ? ` dengan jatuh tempo ${formatDateID(transaction.dueDate)}` : ""}. Terima kasih.`,
   );
+  const canVoid = user.role === "owner" && transaction.payments.length === 0 && transaction.status !== "batal";
   const paidPercent = Math.min(100, Math.round((transaction.paid / Math.max(transaction.total, 1)) * 100));
 
   return (
@@ -79,6 +80,14 @@ export default async function TransactionDetailPage({
             <span className="hidden sm:inline">Unduh</span>
           </a>
           <PrintButton />
+          {canVoid && (
+            <VoidTransactionButton
+              transactionId={transaction.id}
+              invoiceNo={transaction.invoiceNo}
+              total={transaction.total}
+              hasSparepart={transaction.items.some((item) => item.category === "sparepart" && item.itemId != null)}
+            />
+          )}
         </div>
       </div>
 
@@ -390,9 +399,6 @@ export default async function TransactionDetailPage({
                 Setiap pembayaran tercatat permanen dan otomatis memperbarui laporan pendapatan.
               </p>
             </div>
-            {user.role === "owner" && transaction.payments.length === 0 && transaction.status !== "batal" && (
-              <VoidForm transactionId={transaction.id} />
-            )}
             <div className="flex items-center justify-center gap-1.5 text-[9px] font-semibold text-faint">
               <User size={10} /> Nota dibuat oleh {transaction.createdByName}
             </div>
