@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { History, Layers } from "lucide-react";
+import { cn } from "@/lib/cn";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatNumber, formatRupiah } from "@/lib/format";
@@ -21,22 +23,33 @@ const MOVEMENT_LABELS: Record<StockMovementType, string> = {
 };
 const timestampFormat = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium", timeStyle: "short" });
 
-export default async function StockBatchesPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function StockBatchesPage({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ view?: string }>;
+}) {
   const user = await requireUser();
   const id = Number((await params).id);
   if (!Number.isInteger(id) || id <= 0) notFound();
+  const view = (await searchParams).view === "kartu" ? "kartu" : "batch";
   const item = await prisma.item.findUnique({ where: { id }, include: {
     stockBatches: { orderBy: [{ receivedDate: "asc" }, { id: "asc" }], include: { purchase: { select: { id: true, supplier: { select: { name: true } } } } } },
   } });
   if (!item || item.category !== "sparepart") notFound();
-  const movements = await prisma.stockMovement.findMany({
-    where: { itemId: id }, orderBy: { id: "desc" }, take: LEDGER_LIMIT,
-    include: {
-      stockBatch: { select: { code: true } },
-      transaction: { select: { id: true, invoiceNo: true } },
-      createdBy: { select: { name: true } },
-    },
-  });
+  const [movementCount, movements] = await Promise.all([
+    prisma.stockMovement.count({ where: { itemId: id } }),
+    view === "kartu" ? prisma.stockMovement.findMany({
+      where: { itemId: id }, orderBy: { id: "desc" }, take: LEDGER_LIMIT,
+      include: {
+        stockBatch: { select: { code: true } },
+        transaction: { select: { id: true, invoiceNo: true } },
+        createdBy: { select: { name: true } },
+      },
+    }) : [],
+  ]);
+  const tabs = [
+    { value: "batch", label: "Riwayat batch", count: item.stockBatches.length, icon: Layers, href: `/stok/${id}` },
+    { value: "kartu", label: "Kartu stok", count: movementCount, icon: History, href: `/stok/${id}?view=kartu` },
+  ] as const;
   const value = item.stockBatches.reduce((sum, batch) => sum + batch.remaining * batch.unitCost, 0);
   return (
     <div className="space-y-5">
@@ -51,7 +64,24 @@ export default async function StockBatchesPage({ params }: { params: Promise<{ i
         </details>
       </>}
       {!item.isActive && <p className="text-sm text-muted">Aktifkan item untuk menerima batch baru.</p>}
-      <div className="card overflow-hidden">
+      <div className="flex items-center gap-1.5" role="tablist" aria-label="Tampilan persediaan">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const active = view === tab.value;
+          return (
+            <Link key={tab.value} href={tab.href} role="tab" aria-selected={active} scroll={false}
+              className={cn(
+                "flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[11.5px] font-extrabold transition",
+                active ? "bg-pine text-white" : "border border-line bg-white text-muted hover:border-line-strong hover:text-ink",
+              )}>
+              <Icon size={13} />
+              {tab.label}
+              <span className={cn("text-[10px] tabular", active ? "text-white/60" : "text-faint")}>{tab.count}</span>
+            </Link>
+          );
+        })}
+      </div>
+      {view === "batch" ? <div className="card overflow-hidden" role="tabpanel">
         <div className="p-5">
           <h2 className="font-display text-lg font-extrabold">Riwayat batch</h2>
           <p className="mt-1 text-xs text-muted">Urutan pemakaian berdasarkan tanggal masuk, lalu urutan pencatatan. Harga modal batch tersimpan tetap.</p>
@@ -74,11 +104,10 @@ export default async function StockBatchesPage({ params }: { params: Promise<{ i
             </table>
           </div>
         )}
-      </div>
-      <div className="card overflow-hidden">
+      </div> : <div className="card overflow-hidden" role="tabpanel">
         <div className="p-5">
           <h2 className="font-display text-lg font-extrabold">Kartu stok</h2>
-          <p className="mt-1 text-xs text-muted">Setiap stok masuk dan keluar, terbaru di atas{movements.length === LEDGER_LIMIT ? ` (${LEDGER_LIMIT} terakhir)` : ""}. Saldo dihitung setelah mutasi.</p>
+          <p className="mt-1 text-xs text-muted">Setiap stok masuk dan keluar, terbaru di atas{movementCount > LEDGER_LIMIT ? ` (${LEDGER_LIMIT} dari ${formatNumber(movementCount)} mutasi)` : ""}. Saldo dihitung setelah mutasi.</p>
         </div>
         {movements.length === 0 ? <p className="p-5 text-sm text-muted">Belum ada mutasi stok.</p> : (
           <div className="table-wrap">
@@ -104,7 +133,7 @@ export default async function StockBatchesPage({ params }: { params: Promise<{ i
             </table>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }
