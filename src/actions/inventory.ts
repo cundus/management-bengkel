@@ -14,7 +14,7 @@ function rupiah(value: FormDataEntryValue | null): number {
 }
 
 export async function saveItemAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  await requireOwner();
+  const user = await requireOwner();
   const id = Number(formData.get("id") ?? 0);
   const name = String(formData.get("name") ?? "").trim();
   const sku = String(formData.get("sku") ?? "").trim().toUpperCase();
@@ -53,21 +53,15 @@ export async function saveItemAction(_prev: ActionState, formData: FormData): Pr
         });
       });
     } else {
-      await prisma.item.create({
-        data: {
-          sku,
-          name,
-          category,
-          unit,
-          price,
-          cost,
-          stock: category === "sparepart" ? stock : 0,
-          minStock,
-          isActive: true,
-          stockBatches: category === "sparepart" && stock > 0 ? {
-            create: { code: "STOK-AWAL", receivedDate: parseDateOnly(todayISO()), quantity: stock, remaining: stock, unitCost: cost },
-          } : undefined,
-        },
+      await prisma.$transaction(async (tx) => {
+        const item = await tx.item.create({
+          data: { sku, name, category, unit, price, cost, stock: 0, minStock, isActive: true },
+        });
+        if (category === "sparepart" && stock > 0) {
+          await receiveStock(tx, {
+            itemId: item.id, code: "STOK-AWAL", receivedDate: parseDateOnly(todayISO()), quantity: stock, unitCost: cost,
+          }, { type: "saldo_awal", createdById: user.id });
+        }
       });
     }
   } catch (error) {
@@ -84,7 +78,7 @@ export async function saveItemAction(_prev: ActionState, formData: FormData): Pr
 }
 
 export async function receiveStockBatchAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  await requireOwner();
+  const user = await requireOwner();
   const itemId = Number(formData.get("itemId"));
   const code = String(formData.get("code") ?? "").trim().toUpperCase();
   const receivedDate = String(formData.get("receivedDate") ?? "");
@@ -101,7 +95,7 @@ export async function receiveStockBatchAction(_prev: ActionState, formData: Form
       await receiveStock(tx, {
         itemId, code, receivedDate: parseDateOnly(receivedDate), quantity, unitCost,
         notes: String(formData.get("notes") ?? "").trim().slice(0, 500) || null,
-      });
+      }, { type: "penerimaan", createdById: user.id });
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {

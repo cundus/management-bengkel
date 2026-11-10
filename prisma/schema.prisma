@@ -33,6 +33,15 @@ enum TransactionStatus {
   batal
 }
 
+// Arah ditentukan oleh tanda qty: positif masuk, negatif keluar.
+enum StockMovementType {
+  saldo_awal
+  penerimaan
+  pembelian
+  penjualan
+  pembatalan
+}
+
 model User {
   id              Int              @id @default(autoincrement())
   name            String
@@ -47,6 +56,7 @@ model User {
   payables        Payable[]        @relation("PayableCreator")
   payablePayments PayablePayment[] @relation("PayablePaymentCreator")
   purchases       Purchase[]
+  stockMovements  StockMovement[]
 
   @@map("users")
 }
@@ -97,33 +107,35 @@ model Item {
   createdAt        DateTime          @default(now()) @map("created_at")
   transactionItems TransactionItem[]
   stockBatches     StockBatch[]
+  stockMovements   StockMovement[]
 
   @@index([category])
   @@map("items")
 }
 
 model Transaction {
-  id           String            @id @default(uuid())
-  invoiceNo    String            @unique @map("invoice_no")
-  customerId   Int               @map("customer_id")
-  vehicleId    Int?              @map("vehicle_id")
-  mechanic     String?
-  subtotal     Int
-  discount     Int               @default(0)
-  total        Int
-  businessDate DateTime          @map("business_date") @db.Date
-  dueDate      DateTime?         @map("due_date") @db.Date
-  notes        String?
-  status       TransactionStatus @default(selesai)
-  createdById  Int               @map("created_by")
-  createdAt    DateTime          @default(now()) @map("created_at")
-  voidedAt     DateTime?         @map("voided_at")
-  voidReason   String?           @map("void_reason")
-  customer     Customer          @relation(fields: [customerId], references: [id])
-  vehicle      Vehicle?          @relation(fields: [vehicleId], references: [id])
-  createdBy    User              @relation("TransactionCreator", fields: [createdById], references: [id])
-  items        TransactionItem[]
-  payments     Payment[]
+  id             String            @id @default(uuid())
+  invoiceNo      String            @unique @map("invoice_no")
+  customerId     Int               @map("customer_id")
+  vehicleId      Int?              @map("vehicle_id")
+  mechanic       String?
+  subtotal       Int
+  discount       Int               @default(0)
+  total          Int
+  businessDate   DateTime          @map("business_date") @db.Date
+  dueDate        DateTime?         @map("due_date") @db.Date
+  notes          String?
+  status         TransactionStatus @default(selesai)
+  createdById    Int               @map("created_by")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  voidedAt       DateTime?         @map("voided_at")
+  voidReason     String?           @map("void_reason")
+  customer       Customer          @relation(fields: [customerId], references: [id])
+  vehicle        Vehicle?          @relation(fields: [vehicleId], references: [id])
+  createdBy      User              @relation("TransactionCreator", fields: [createdById], references: [id])
+  items          TransactionItem[]
+  payments       Payment[]
+  stockMovements StockMovement[]
 
   @@index([businessDate])
   @@index([customerId])
@@ -166,11 +178,40 @@ model StockBatch {
   createdAt        DateTime          @default(now()) @map("created_at")
   item             Item              @relation(fields: [itemId], references: [id])
   transactionItems TransactionItem[]
+  stockMovements   StockMovement[]
 
   @@unique([itemId, code])
   @@index([purchaseId])
   @@index([itemId, receivedDate, id])
   @@map("stock_batches")
+}
+
+// Ledger stok append-only. Setiap perubahan items.stock menulis satu baris atau lebih
+// di transaksi database yang sama; jumlah qty per item selalu sama dengan items.stock.
+model StockMovement {
+  id            Int               @id @default(autoincrement())
+  itemId        Int               @map("item_id")
+  stockBatchId  Int?              @map("stock_batch_id")
+  type          StockMovementType
+  qty           Int
+  balanceAfter  Int               @map("balance_after")
+  transactionId String?           @map("transaction_id")
+  purchaseId    Int?              @map("purchase_id")
+  notes         String?
+  createdById   Int?              @map("created_by")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  item          Item              @relation(fields: [itemId], references: [id])
+  stockBatch    StockBatch?       @relation(fields: [stockBatchId], references: [id], onDelete: Restrict)
+  transaction   Transaction?      @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  purchase      Purchase?         @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  createdBy     User?             @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([itemId, id])
+  @@index([stockBatchId])
+  @@index([transactionId])
+  @@index([purchaseId])
+  @@index([createdAt])
+  @@map("stock_movements")
 }
 
 model Payment {
@@ -205,12 +246,12 @@ model Expense {
 }
 
 model Supplier {
-  id            Int       @id @default(autoincrement())
+  id            Int        @id @default(autoincrement())
   name          String
-  contactPerson String?   @map("contact_person")
+  contactPerson String?    @map("contact_person")
   phone         String?
   notes         String?
-  createdAt     DateTime  @default(now()) @map("created_at")
+  createdAt     DateTime   @default(now()) @map("created_at")
   payables      Payable[]
   purchases     Purchase[]
 
@@ -237,20 +278,21 @@ model Payable {
 }
 
 model Purchase {
-  id           Int          @id @default(autoincrement())
-  requestId    String       @unique @map("request_id") @db.Uuid
-  supplierId   Int          @map("supplier_id")
-  referenceNo  String?      @map("reference_no")
-  businessDate DateTime     @map("business_date") @db.Date
-  total        Int
-  notes        String?
-  payableId    Int          @unique @map("payable_id")
-  createdById  Int          @map("created_by")
-  createdAt    DateTime     @default(now()) @map("created_at")
-  supplier     Supplier     @relation(fields: [supplierId], references: [id])
-  payable      Payable      @relation(fields: [payableId], references: [id])
-  createdBy    User         @relation(fields: [createdById], references: [id])
-  batches      StockBatch[]
+  id             Int             @id @default(autoincrement())
+  requestId      String          @unique @map("request_id") @db.Uuid
+  supplierId     Int             @map("supplier_id")
+  referenceNo    String?         @map("reference_no")
+  businessDate   DateTime        @map("business_date") @db.Date
+  total          Int
+  notes          String?
+  payableId      Int             @unique @map("payable_id")
+  createdById    Int             @map("created_by")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  supplier       Supplier        @relation(fields: [supplierId], references: [id])
+  payable        Payable         @relation(fields: [payableId], references: [id])
+  createdBy      User            @relation(fields: [createdById], references: [id])
+  batches        StockBatch[]
+  stockMovements StockMovement[]
 
   @@unique([supplierId, referenceNo])
   @@index([businessDate])

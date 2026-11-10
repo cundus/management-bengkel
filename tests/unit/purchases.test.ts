@@ -40,6 +40,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (supplierId) {
+    await db.stockMovement.deleteMany({ where: { itemId: { in: [itemId, secondId] } } });
     await db.stockBatch.deleteMany({ where: { itemId: { in: [itemId, secondId] } } });
     await db.purchase.deleteMany({ where: { supplierId } });
     await db.payable.deleteMany({ where: { supplierId } });
@@ -117,7 +118,13 @@ describe("purchasing terhubung dengan batch dan hutang", () => {
       expect(record.payable.dueDate === null).toBe(payNow === 300);
     }
     await expect(db.$transaction(async (tx) => {
-      const allocation = await consumeStock(tx, itemId, 3);
+      const owner = await tx.user.findFirstOrThrow({ where: { role: "owner" } });
+      const customer = await tx.customer.create({ data: { name: "Purchasing rollback customer" } });
+      const sale = await tx.transaction.create({ data: {
+        invoiceNo: `PURCHASING-ROLLBACK-${randomUUID()}`, customerId: customer.id, subtotal: 0, total: 0,
+        businessDate: new Date(`${todayISO()}T00:00:00Z`), createdById: owner.id,
+      } });
+      const allocation = await consumeStock(tx, itemId, 3, { transactionId: sale.id, createdById: owner.id });
       expect(allocation.map((line) => [line.qty, line.unitCost])).toEqual([[2, 100], [1, 300]]);
       throw new Error("rollback-consumption");
     })).rejects.toThrow("rollback-consumption");

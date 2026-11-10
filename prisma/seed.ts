@@ -450,6 +450,11 @@ async function main() {
     itemId: item.id, code: "STOK-AWAL", receivedDate: dateOnly(today),
     quantity: item.stock, remaining: item.stock, unitCost: item.cost, notes: "Saldo stok demo",
   })) });
+  const openingBatches = await prisma.stockBatch.findMany({ where: { code: "STOK-AWAL" }, orderBy: { itemId: "asc" } });
+  await prisma.stockMovement.createMany({ data: openingBatches.map((batch) => ({
+    itemId: batch.itemId, stockBatchId: batch.id, type: "saldo_awal" as const, qty: batch.quantity,
+    balanceAfter: batch.quantity, notes: "Saldo stok demo", createdById: owner.id,
+  })) });
 
   console.log(`Seed ${APP_BRAND} selesai.`);
   console.log(`Login owner: owner@wmc225.id / ${DEMO_PASSWORD}`);

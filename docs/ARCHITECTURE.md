@@ -200,7 +200,7 @@ Detail langkah dan troubleshooting ada di [DEPLOYMENT.md](DEPLOYMENT.md).
 ## Keputusan yang sengaja ditunda
 
 - **Audit log & reversal pembayaran** — penting sebelum production serius, entitas belum dibuat.
-- **Stock ledger** — saat ini stok adalah saldo; belum ada histori pergerakan.
+- **Opname stok** — ledger pergerakan (`stock_movements`) sudah ada; penyesuaian/opname dengan selisih belum dibuat.
 - **Nota PDF** — masih CSV/cetak browser; PDF server-side ditunda.
 - **Optimistic concurrency** — belum diperlukan untuk single kasir; advisory lock hanya untuk nomor nota.
 - **Pagination di level database untuk piutang/laporan** — dataset satu bengkel masih kecil; akan dioptimalkan saat volume bertambah.

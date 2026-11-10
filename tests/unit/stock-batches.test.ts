@@ -39,6 +39,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (itemId) await db.stockMovement.deleteMany({ where: { itemId } });
   if (customerId) await db.transaction.deleteMany({ where: { customerId } });
   if (itemId) {
     await db.stockBatch.deleteMany({ where: { itemId } });
@@ -65,6 +66,9 @@ describe("batch stok dengan PostgreSQL", () => {
       const batches = await tx.$queryRawUnsafe<{ code: string; quantity: number; remaining: number; unit_cost: number }[]>('SELECT code,quantity,remaining,unit_cost FROM stock_batches');
       expect(batches).toEqual([{ code: "STOK-AWAL", quantity: 7, remaining: 7, unit_cost: 200 }]);
       expect(await tx.$queryRawUnsafe('SELECT stock FROM items WHERE sku = \'OLD\'')).toEqual([{ stock: 7 }]);
+      await apply("20261109040000_purchasing");
+      await apply("20261110000000_stock_movements");
+      expect(await tx.$queryRawUnsafe('SELECT type::text, qty, balance_after FROM stock_movements')).toEqual([{ type: "saldo_awal", qty: 7, balance_after: 7 }]);
       throw new Error("rollback-migration-check");
     })).rejects.toThrow("rollback-migration-check");
   });
@@ -143,5 +147,33 @@ describe("batch stok dengan PostgreSQL", () => {
     expect(results.filter((result) => result.ok)).toHaveLength(1);
     const record = await db.transaction.findUniqueOrThrow({ where: { id: next.id }, include: { payments: true } });
     expect(record.status === "batal" ? record.payments.length === 0 : record.payments.length === 1).toBe(true);
+  });
+
+  it("ledger mencatat setiap perubahan stok dengan saldo berjalan yang cocok", async () => {
+    const movements = await db.stockMovement.findMany({ where: { itemId }, orderBy: { id: "asc" } });
+    let balance = 0;
+    for (const movement of movements) {
+      balance += movement.qty;
+      expect(movement.balanceAfter).toBe(balance);
+      expect(movement.stockBatchId).not.toBeNull();
+      if (movement.type === "penjualan") expect(movement.qty).toBeLessThan(0);
+      else expect(movement.qty).toBeGreaterThan(0);
+      if (movement.type === "penjualan" || movement.type === "pembatalan") expect(movement.transactionId).not.toBeNull();
+    }
+    expect(balance).toBe((await db.item.findUniqueOrThrow({ where: { id: itemId } })).stock);
+    expect(movements.slice(0, 4).map((m) => [m.type, m.qty, m.balanceAfter])).toEqual([
+      ["penerimaan", 2, 2], ["penerimaan", 3, 5], ["penjualan", -2, 3], ["penjualan", -2, 1],
+    ]);
+    expect(new Set(movements.map((m) => m.type))).toEqual(new Set(["penerimaan", "penjualan", "pembatalan"]));
+  });
+
+  it("stok awal item baru tercatat sebagai saldo awal", async () => {
+    expect((await saveItemAction(state, form({ name: "Ledger new part", sku: "LEDGER-NEW-TEST", category: "sparepart", price: 1000, cost: 400, stock: 6 }))).ok).toBe(true);
+    const created = await db.item.findUniqueOrThrow({ where: { sku: "LEDGER-NEW-TEST" }, include: { stockMovements: true, stockBatches: true } });
+    expect(created.stock).toBe(6);
+    expect(created.stockMovements.map((m) => [m.type, m.qty, m.balanceAfter, m.stockBatchId])).toEqual([["saldo_awal", 6, 6, created.stockBatches[0].id]]);
+    await db.stockMovement.deleteMany({ where: { itemId: created.id } });
+    await db.stockBatch.deleteMany({ where: { itemId: created.id } });
+    await db.item.delete({ where: { id: created.id } });
   });
 });

@@ -72,7 +72,7 @@ export async function createPurchaseAction(input: unknown): Promise<PurchaseResu
         payableId: payable.id, createdById: user.id,
       } });
       for (const line of [...data.lines].sort((a, b) => a.itemId - b.itemId)) {
-        await receiveStock(tx, { ...line, receivedDate: parseDateOnly(data.businessDate), purchaseId: purchase.id });
+        await receiveStock(tx, { ...line, receivedDate: parseDateOnly(data.businessDate), purchaseId: purchase.id }, { type: "pembelian", createdById: user.id });
       }
       return purchase.id;
     }, { timeout: 15000 });

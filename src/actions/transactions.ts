@@ -8,7 +8,7 @@ import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/constants";
 import { addDaysISO, isValidISODate, parseDateOnly, todayISO } from "@/lib/dates";
 import { prisma } from "@/lib/db";
 import type { ActionState } from "@/lib/action-state";
-import { consumeStock, lockStockItem } from "@/lib/stock";
+import { consumeStock, returnStock } from "@/lib/stock";
 
 export type CreateTransactionInput = {
   customerId: number;
@@ -107,19 +107,6 @@ export async function createTransactionAction(input: CreateTransactionInput): Pr
       // Serialisasi pembuatan nomor nota per bengkel, aman untuk beberapa kasir.
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(225225)::text AS lock`;
 
-      // Split a sparepart line by batch so each quantity retains its exact HPP.
-      const batchLines: (typeof lines[number] & { stockBatchId?: number })[] = [];
-      for (const line of [...lines].sort((a, b) => a.itemId - b.itemId)) {
-        if (line.category !== "sparepart") {
-          batchLines.push(line);
-          continue;
-        }
-        const allocations = await consumeStock(tx, line.itemId, line.qty);
-        for (const allocation of allocations) {
-          batchLines.push({ ...line, ...allocation, subtotal: line.unitPrice * allocation.qty });
-        }
-      }
-
       const count = await tx.transaction.count({ where: { businessDate: parseDateOnly(today) } });
       let sequence = count + 1;
       let invoiceNo = generateInvoiceNumber(today, sequence);
@@ -147,7 +134,6 @@ export async function createTransactionAction(input: CreateTransactionInput): Pr
           status: "selesai",
           createdById: user.id,
           createdAt,
-          items: { create: batchLines },
           payments:
             payNow > 0
               ? {
@@ -163,6 +149,21 @@ export async function createTransactionAction(input: CreateTransactionInput): Pr
               : undefined,
         },
       });
+
+      // The header exists first so ledger rows can reference it. Split a sparepart line
+      // by batch so each quantity retains its exact HPP.
+      const batchLines: (typeof lines[number] & { transactionId: string; stockBatchId?: number })[] = [];
+      for (const line of [...lines].sort((a, b) => a.itemId - b.itemId)) {
+        if (line.category !== "sparepart") {
+          batchLines.push({ ...line, transactionId: id });
+          continue;
+        }
+        const allocations = await consumeStock(tx, line.itemId, line.qty, { transactionId: id, createdById: user.id });
+        for (const allocation of allocations) {
+          batchLines.push({ ...line, ...allocation, transactionId: id, subtotal: line.unitPrice * allocation.qty });
+        }
+      }
+      await tx.transactionItem.createMany({ data: batchLines });
 
       return { id, invoiceNo };
     });
@@ -270,20 +271,8 @@ export async function voidTransactionAction(_prev: ActionState, formData: FormDa
       if (changed.count !== 1) throw new Error("Transaksi sudah dibatalkan atau memiliki pembayaran.");
       for (const line of [...transaction.items].sort((a, b) => (a.itemId ?? 0) - (b.itemId ?? 0))) {
         if (line.itemId && line.category === "sparepart") {
-          await lockStockItem(tx, line.itemId);
-          if (line.stockBatchId) {
-            await tx.stockBatch.update({ where: { id: line.stockBatchId }, data: { remaining: { increment: line.qty } } });
-          } else {
-            // Older invoices predate batch tracking; preserve their original cost.
-            await tx.stockBatch.create({ data: {
-              itemId: line.itemId, code: `RETUR-LAMA-${line.id}`, receivedDate: parseDateOnly(todayISO()),
-              quantity: line.qty, remaining: line.qty, unitCost: line.unitCost,
-              notes: `Pengembalian ${transaction.invoiceNo}`,
-            } });
-          }
-          await tx.item.update({
-            where: { id: line.itemId },
-            data: { stock: { increment: line.qty } },
+          await returnStock(tx, { ...line, itemId: line.itemId }, {
+            transactionId: id, invoiceNo: transaction.invoiceNo, createdById: user.id,
           });
         }
       }

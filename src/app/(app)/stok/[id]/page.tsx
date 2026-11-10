@@ -7,8 +7,19 @@ import { formatNumber, formatRupiah } from "@/lib/format";
 import { dateOnlyToISO, formatDateID, todayISO } from "@/lib/dates";
 import { PageHeader } from "@/components/ui/page-header";
 import { BatchForm } from "@/components/inventory/batch-form";
+import type { StockMovementType } from "@prisma/client";
 
 export const metadata: Metadata = { title: "Batch stok" };
+
+const LEDGER_LIMIT = 100;
+const MOVEMENT_LABELS: Record<StockMovementType, string> = {
+  saldo_awal: "Saldo awal",
+  penerimaan: "Penerimaan",
+  pembelian: "Pembelian",
+  penjualan: "Penjualan",
+  pembatalan: "Pembatalan nota",
+};
+const timestampFormat = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium", timeStyle: "short" });
 
 export default async function StockBatchesPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -18,6 +29,14 @@ export default async function StockBatchesPage({ params }: { params: Promise<{ i
     stockBatches: { orderBy: [{ receivedDate: "asc" }, { id: "asc" }], include: { purchase: { select: { id: true, supplier: { select: { name: true } } } } } },
   } });
   if (!item || item.category !== "sparepart") notFound();
+  const movements = await prisma.stockMovement.findMany({
+    where: { itemId: id }, orderBy: { id: "desc" }, take: LEDGER_LIMIT,
+    include: {
+      stockBatch: { select: { code: true } },
+      transaction: { select: { id: true, invoiceNo: true } },
+      createdBy: { select: { name: true } },
+    },
+  });
   const value = item.stockBatches.reduce((sum, batch) => sum + batch.remaining * batch.unitCost, 0);
   return (
     <div className="space-y-5">
@@ -50,6 +69,36 @@ export default async function StockBatchesPage({ params }: { params: Promise<{ i
                   <td>{formatNumber(batch.quantity)}</td>
                   <td>{formatNumber(batch.remaining)} {item.unit}{batch.remaining === 0 && <span className="ml-2 badge-neutral">Habis</span>}</td>
                   <td>{formatRupiah(batch.unitCost)}</td><td>{formatRupiah(batch.remaining * batch.unitCost)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      <div className="card overflow-hidden">
+        <div className="p-5">
+          <h2 className="font-display text-lg font-extrabold">Kartu stok</h2>
+          <p className="mt-1 text-xs text-muted">Setiap stok masuk dan keluar, terbaru di atas{movements.length === LEDGER_LIMIT ? ` (${LEDGER_LIMIT} terakhir)` : ""}. Saldo dihitung setelah mutasi.</p>
+        </div>
+        {movements.length === 0 ? <p className="p-5 text-sm text-muted">Belum ada mutasi stok.</p> : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead><tr><th>Waktu</th><th>Jenis</th><th>Referensi</th><th>Batch</th><th>Masuk / keluar</th><th>Saldo</th></tr></thead>
+              <tbody>{movements.map((movement) => (
+                <tr key={movement.id}>
+                  <td>{timestampFormat.format(movement.createdAt)}{movement.createdBy && <p className="text-xs text-muted">{movement.createdBy.name}</p>}</td>
+                  <td>{MOVEMENT_LABELS[movement.type]}</td>
+                  <td>
+                    {movement.transaction && <Link href={`/transaksi/${movement.transaction.id}`} className="text-pine underline">{movement.transaction.invoiceNo}</Link>}
+                    {movement.purchaseId && (user.role === "owner"
+                      ? <Link href={`/pembelian/${movement.purchaseId}`} className="text-pine underline">PB-{String(movement.purchaseId).padStart(5, "0")}</Link>
+                      : <span>PB-{String(movement.purchaseId).padStart(5, "0")}</span>)}
+                    {!movement.transaction && !movement.purchaseId && <span className="text-muted">-</span>}
+                    {movement.notes && <p className="max-w-xs whitespace-normal text-xs text-muted">{movement.notes}</p>}
+                  </td>
+                  <td>{movement.stockBatch?.code ?? "-"}</td>
+                  <td className={movement.qty > 0 ? "font-bold text-pine" : "font-bold"}>{movement.qty > 0 ? "+" : "−"}{formatNumber(Math.abs(movement.qty))} {item.unit}</td>
+                  <td>{formatNumber(movement.balanceAfter)}</td>
                 </tr>
               ))}</tbody>
             </table>
