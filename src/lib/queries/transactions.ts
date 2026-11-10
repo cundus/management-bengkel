@@ -1,11 +1,12 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { dateOnlyToISO, dateTimeToISO, todayISO } from "../dates";
-import { agingBucket, paymentStatus, remainingAmount } from "../calculations";
+import { agingBucket, paymentStatus, remainingAmount, settledReceivable } from "../calculations";
 import { listTransactionInclude, mapTransactionList, openTransactionRecords } from "./mappers";
 import type {
   Payment,
   ReceivableFilter,
+  SettledReceivableRow,
   TransactionDetail,
   TransactionItem,
   TransactionListRow,
@@ -190,6 +191,59 @@ export async function getReceivables(options: {
   return {
     rows,
     ...aggregate,
+  };
+}
+
+export async function getSettledReceivables(options: { search?: string; limit?: number }): Promise<{
+  rows: SettledReceivableRow[];
+  count: number;
+  total: number;
+  monthCount: number;
+  monthTotal: number;
+}> {
+  const records = await prisma.transaction.findMany({
+    where: { status: "selesai", payments: { some: {} } },
+    include: {
+      customer: true,
+      vehicle: true,
+      payments: {
+        select: { amount: true, method: true, businessDate: true },
+        orderBy: [{ businessDate: "asc" }, { paidAt: "asc" }],
+      },
+    },
+  });
+
+  const monthPrefix = todayISO().slice(0, 7);
+  const settled: SettledReceivableRow[] = [];
+  for (const record of records) {
+    const payments = record.payments.map((payment) => ({
+      amount: payment.amount,
+      method: payment.method,
+      businessDate: dateOnlyToISO(payment.businessDate),
+    }));
+    const result = settledReceivable(record.total, dateOnlyToISO(record.businessDate), payments);
+    if (!result) continue;
+    settled.push({ ...mapTransactionList(record), ...result, payments });
+  }
+  settled.sort((a, b) => b.settledDate.localeCompare(a.settledDate) || b.createdAt.localeCompare(a.createdAt));
+
+  const thisMonth = settled.filter((row) => row.settledDate.startsWith(monthPrefix));
+  const search = (options.search ?? "").trim().toLowerCase();
+  const rows = settled
+    .filter((row) => {
+      if (!search) return true;
+      return [row.invoiceNo, row.customerName, row.customerPhone, row.plateNumber]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(search));
+    })
+    .slice(0, options.limit ?? 100);
+
+  return {
+    rows,
+    count: settled.length,
+    total: settled.reduce((sum, row) => sum + (row.total - row.downPayment), 0),
+    monthCount: thisMonth.length,
+    monthTotal: thisMonth.reduce((sum, row) => sum + (row.total - row.downPayment), 0),
   };
 }
 

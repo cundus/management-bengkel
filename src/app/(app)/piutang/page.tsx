@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, CalendarClock, HandCoins, MessageCircle, Search, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarClock, CheckCircle2, HandCoins, MessageCircle, Search, X } from "lucide-react";
 import { requireUser } from "@/lib/auth";
-import { getAgingSummary, getReceivables } from "@/lib/queries/transactions";
+import { getAgingSummary, getReceivables, getSettledReceivables } from "@/lib/queries/transactions";
 import { PageHeader } from "@/components/ui/page-header";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DueBadge } from "@/components/ui/status-badge";
 import { QuickPayButton } from "@/components/transactions/quick-pay-button";
+import { SettledReceivableList } from "@/components/receivables/settled-list";
 import { dueLabel, formatDateID } from "@/lib/dates";
 import { formatCompactRupiah, formatPhoneForWhatsApp, formatRupiah, percent } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -28,15 +29,17 @@ function isFilter(value: string | undefined): value is ReceivableFilter {
 export default async function ReceivablesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; filter?: string }>;
+  searchParams: Promise<{ q?: string; filter?: string; view?: string }>;
 }) {
   await requireUser();
   const params = await searchParams;
   const query = params.q?.trim() ?? "";
   const filter: ReceivableFilter = isFilter(params.filter) ? params.filter : "semua";
-  const [data, aging] = await Promise.all([
-    getReceivables({ search: query, filter, limit: 100 }),
+  const view = params.view === "lunas" ? "lunas" : "berjalan";
+  const [data, aging, settled] = await Promise.all([
+    getReceivables({ search: view === "berjalan" ? query : "", filter, limit: 100 }),
     getAgingSummary(),
+    getSettledReceivables({ search: view === "lunas" ? query : "", limit: 100 }),
   ]);
   const overduePercent = percent(data.overdueTotal, data.total);
   const avgAge = data.rows.length
@@ -151,6 +154,38 @@ export default async function ReceivablesPage({
         </div>
       )}
 
+      <div className="mt-4 flex items-center gap-1.5" role="tablist" aria-label="Tampilan piutang">
+        {[
+          { value: "berjalan", label: "Piutang berjalan", count: data.count, icon: HandCoins },
+          { value: "lunas", label: "Riwayat lunas", count: settled.count, icon: CheckCircle2 },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <Link
+              key={tab.value}
+              href={tab.value === "lunas" ? "/piutang?view=lunas" : "/piutang"}
+              role="tab"
+              aria-selected={view === tab.value}
+              className={cn(
+                "flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[11.5px] font-extrabold transition",
+                view === tab.value
+                  ? "bg-pine text-white"
+                  : "border border-line bg-white text-muted hover:border-line-strong hover:text-ink",
+              )}
+            >
+              <Icon size={13} />
+              {tab.label}
+              <span className={cn("text-[10px] tabular", view === tab.value ? "text-white/60" : "text-faint")}>
+                {tab.count}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+
+      {view === "lunas" ? (
+        <SettledReceivableList data={settled} query={query} />
+      ) : (
       <div className="card mt-4 overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <form method="get" action="/piutang" className="relative w-full sm:max-w-sm">
@@ -299,6 +334,8 @@ export default async function ReceivablesPage({
           </div>
         )}
       </div>
+
+      )}
 
       <div className="mt-4 flex items-start gap-2 rounded-xl border border-line bg-surface/60 px-4 py-3">
         <MessageCircle size={14} className="mt-0.5 shrink-0 text-brand" />

@@ -1,4 +1,5 @@
-import type { MarginItem, MarginLine, MarginSummary, PaymentStatus } from "./types";
+import { daysBetween } from "./dates";
+import type { MarginItem, MarginLine, MarginSummary, PaymentStatus, SettlementPayment } from "./types";
 
 export type CartLine = {
   qty: number;
@@ -141,4 +142,28 @@ export function marginByCategory(transactions: MarginTransaction[]): {
   items.sparepart.sort((a, b) => b.grossProfit - a.grossProfit);
 
   return { categories, items };
+}
+
+/**
+ * Nota dianggap "piutang yang sudah lunas" bila saat ini sudah terbayar penuh
+ * dan pembayaran terakhirnya terjadi setelah tanggal nota (artinya nota sempat
+ * belum lunas di hari dibuat). Pembayaran harus urut dari yang paling awal.
+ */
+export function settledReceivable(
+  total: number,
+  businessDate: string,
+  payments: SettlementPayment[],
+): { settledDate: string; daysToSettle: number; downPayment: number } | null {
+  if (payments.length === 0) return null;
+  const paid = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  if (remainingAmount(total, paid) > 0) return null;
+  const settledDate = payments.reduce(
+    (latest, payment) => (payment.businessDate > latest ? payment.businessDate : latest),
+    payments[0].businessDate,
+  );
+  if (settledDate <= businessDate) return null;
+  const downPayment = payments
+    .filter((payment) => payment.businessDate <= businessDate)
+    .reduce((sum, payment) => sum + payment.amount, 0);
+  return { settledDate, daysToSettle: daysBetween(businessDate, settledDate), downPayment };
 }

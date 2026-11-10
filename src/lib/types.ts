@@ -66,6 +66,19 @@ export type TransactionListRow = {
   paymentStatus: PaymentStatus;
 };
 
+export type SettlementPayment = {
+  amount: number;
+  method: string;
+  businessDate: string;
+};
+
+export type SettledReceivableRow = TransactionListRow & {
+  settledDate: string;
+  daysToSettle: number;
+  downPayment: number;
+  payments: SettlementPayment[];
+};
+
 export type TransactionItem = {
   id: number;
   itemId: number | null;

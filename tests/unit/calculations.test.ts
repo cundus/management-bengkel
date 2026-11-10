@@ -10,6 +10,7 @@ import {
   normalizePhoneForWhatsApp,
   paymentStatus,
   remainingAmount,
+  settledReceivable,
 } from "@/lib/calculations";
 
 describe("calculateTransactionTotals", () => {
@@ -124,5 +125,24 @@ describe("marginByCategory", () => {
     expect(result.categories.sparepart.margin).toBe(27.6);
     expect(result.items.sparepart).toHaveLength(1);
     expect(result.items.sparepart[0]).toMatchObject({ name: "Oli", qty: 3, grossProfit: 40_000 });
+  });
+});
+
+describe("settledReceivable", () => {
+  it("mengenali nota yang dilunasi setelah tanggal nota", () => {
+    expect(
+      settledReceivable(135_000, "2026-11-09", [
+        { amount: 100_000, method: "tunai", businessDate: "2026-11-09" },
+        { amount: 35_000, method: "tunai", businessDate: "2026-11-10" },
+      ]),
+    ).toEqual({ settledDate: "2026-11-10", daysToSettle: 1, downPayment: 100_000 });
+  });
+
+  it("mengabaikan nota yang langsung lunas di hari yang sama", () => {
+    expect(settledReceivable(50_000, "2026-11-10", [{ amount: 50_000, method: "tunai", businessDate: "2026-11-10" }])).toBeNull();
+  });
+
+  it("mengabaikan nota yang masih ada sisa", () => {
+    expect(settledReceivable(50_000, "2026-11-09", [{ amount: 20_000, method: "tunai", businessDate: "2026-11-10" }])).toBeNull();
   });
 });
