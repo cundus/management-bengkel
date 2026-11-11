@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { dateTimeToISO } from "../dates";
-import { remainingAmount } from "../calculations";
+import { getCustomerTransactionStats } from "./balances";
 import { listTransactionInclude, mapTransactionList, mapVehicle } from "./mappers";
 import type { Customer, CustomerDetail, CustomerWithVehicles, TransactionListRow } from "../types";
 
@@ -40,31 +40,20 @@ export async function searchCustomers(search?: string): Promise<Customer[]> {
 
   const rows = await prisma.customer.findMany({
     where,
-    include: {
-      vehicles: { select: { id: true } },
-      transactions: {
-        where: { status: "selesai" },
-        select: { total: true, createdAt: true, payments: { select: { amount: true } } },
-      },
-    },
+    include: { _count: { select: { vehicles: true } } },
     orderBy: { name: "asc" },
   });
+  // Jumlah servis, sisa piutang, dan kunjungan terakhir dihitung di database per pelanggan.
+  const stats = await getCustomerTransactionStats(rows.map((row) => row.id));
 
-  return rows.map((row) => {
-    const outstanding = row.transactions.reduce((sum, transaction) => {
-      const paid = transaction.payments.reduce((paidSum, payment) => paidSum + payment.amount, 0);
-      return sum + remainingAmount(transaction.total, paid);
-    }, 0);
-    const lastVisit = row.transactions.reduce<Date | null>(
-      (latest, transaction) => (!latest || transaction.createdAt > latest ? transaction.createdAt : latest),
-      null,
-    );
+  return rows.map(({ _count, ...row }) => {
+    const stat = stats.get(row.id);
     return {
       ...mapCustomer(row),
-      vehicleCount: row.vehicles.length,
-      transactionCount: row.transactions.length,
-      outstanding,
-      lastVisit: lastVisit ? dateTimeToISO(lastVisit) : null,
+      vehicleCount: _count.vehicles,
+      transactionCount: stat?.count ?? 0,
+      outstanding: stat?.outstanding ?? 0,
+      lastVisit: stat?.lastVisit ? dateTimeToISO(stat.lastVisit) : null,
     };
   });
 }

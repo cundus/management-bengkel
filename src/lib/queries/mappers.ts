@@ -54,10 +54,3 @@ export function mapVehicle(vehicle: {
   };
 }
 
-export function openTransactionRecords(
-  records: ListTransactionRecord[],
-): (TransactionListRow & { dueDateValue: Date | null })[] {
-  return records
-    .map((record) => ({ ...mapTransactionList(record), dueDateValue: record.dueDate }))
-    .filter((record) => record.status === "selesai" && record.remaining > 0);
-}

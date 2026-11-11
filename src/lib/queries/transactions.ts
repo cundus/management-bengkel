@@ -1,8 +1,16 @@
 import { prisma } from "../db";
-import { dateOnlyToISO, dateTimeToISO, todayISO } from "../dates";
+import { dateOnlyToISO, dateTimeToISO, monthRange, todayISO } from "../dates";
 import { agingBucket, paymentStatus, remainingAmount, settledReceivable } from "../calculations";
-import { listTransactionInclude, mapTransactionList, openTransactionRecords } from "./mappers";
-import { findTransactionPage } from "./balances";
+import { listTransactionInclude, mapTransactionList } from "./mappers";
+import {
+  findOpenReceivableIds,
+  findSettledIds,
+  findTransactionPage,
+  getOpenReceivableSummary,
+  getReceivableAging,
+  getSettledSummary,
+  type AgingKey,
+} from "./balances";
 import type {
   Payment,
   ReceivableFilter,
@@ -159,51 +167,24 @@ export async function getReceivables(options: {
   limit?: number;
 }): Promise<{ rows: TransactionListRow[]; total: number; count: number; overdueTotal: number; overdueCount: number }> {
   const today = todayISO();
-  const records = await prisma.transaction.findMany({
-    where: { status: "selesai" },
-    include: listTransactionInclude,
-    orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
-  });
-
-  const allOpen = openTransactionRecords(records).sort((a, b) => {
-    const aDue = a.dueDateValue?.getTime() ?? Number.MAX_SAFE_INTEGER;
-    const bDue = b.dueDateValue?.getTime() ?? Number.MAX_SAFE_INTEGER;
-    return aDue - bDue;
-  });
-
-  const aggregate = allOpen.reduce(
-    (acc, row) => {
-      acc.total += row.remaining;
-      acc.count += 1;
-      if (row.dueDate && row.dueDate < today) {
-        acc.overdueTotal += row.remaining;
-        acc.overdueCount += 1;
-      }
-      return acc;
-    },
-    { total: 0, count: 0, overdueTotal: 0, overdueCount: 0 },
-  );
-
-  const search = (options.search ?? "").trim().toLowerCase();
-  const filter = options.filter ?? "semua";
-  const rows = allOpen
-    .filter((row) => {
-      if (!search) return true;
-      return [row.invoiceNo, row.customerName, row.customerPhone, row.plateNumber]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(search));
-    })
-    .filter((row) => {
-      if (filter === "jatuh_tempo") return !!row.dueDate && row.dueDate < today;
-      if (filter === "lancar") return !row.dueDate || row.dueDate >= today;
-      return true;
-    })
-    .slice(0, options.limit ?? 100)
-    .map(({ dueDateValue: _dueDateValue, ...row }) => ({ ...row, aging: agingBucket(row.dueDate, today) }));
+  // Ringkasan selalu atas semua nota terbuka; hanya baris yang tampil yang dimuat lengkap.
+  const [summary, ids] = await Promise.all([
+    getOpenReceivableSummary(today),
+    findOpenReceivableIds({
+      today,
+      search: (options.search ?? "").trim(),
+      filter: options.filter ?? "semua",
+      limit: options.limit ?? 100,
+    }),
+  ]);
+  const rows = (await listRowsByIds(ids)).map((row) => ({ ...row, aging: agingBucket(row.dueDate, today) }));
 
   return {
     rows,
-    ...aggregate,
+    total: summary.total,
+    count: summary.count,
+    overdueTotal: summary.overdueTotal,
+    overdueCount: summary.overdueCount,
   };
 }
 
@@ -214,8 +195,15 @@ export async function getSettledReceivables(options: { search?: string; limit?: 
   monthCount: number;
   monthTotal: number;
 }> {
+  const { start, end } = monthRange(todayISO().slice(0, 7));
+  const [summary, ids] = await Promise.all([
+    getSettledSummary(start, end),
+    findSettledIds((options.search ?? "").trim(), options.limit ?? 100),
+  ]);
+  if (ids.length === 0) return { rows: [], ...summary };
+
   const records = await prisma.transaction.findMany({
-    where: { status: "selesai", payments: { some: {} } },
+    where: { id: { in: ids } },
     include: {
       customer: true,
       vehicle: true,
@@ -226,56 +214,31 @@ export async function getSettledReceivables(options: { search?: string; limit?: 
       },
     },
   });
+  const byId = new Map(records.map((record) => [record.id, record]));
 
-  const monthPrefix = todayISO().slice(0, 7);
-  const settled: SettledReceivableRow[] = [];
-  for (const record of records) {
+  // Detail pelunasan tetap dihitung dengan `settledReceivable` agar sama persis dengan tampilan sebelumnya.
+  const rows: SettledReceivableRow[] = [];
+  for (const id of ids) {
+    const record = byId.get(id);
+    if (!record) continue;
     const payments = record.payments.map((payment) => ({
       amount: payment.amount,
       method: payment.method,
       businessDate: dateOnlyToISO(payment.businessDate),
     }));
     const result = settledReceivable(record.total, dateOnlyToISO(record.businessDate), payments);
-    if (!result) continue;
-    settled.push({ ...mapTransactionList(record), ...result, payments });
+    if (result) rows.push({ ...mapTransactionList(record), ...result, payments });
   }
-  settled.sort((a, b) => b.settledDate.localeCompare(a.settledDate) || b.createdAt.localeCompare(a.createdAt));
 
-  const thisMonth = settled.filter((row) => row.settledDate.startsWith(monthPrefix));
-  const search = (options.search ?? "").trim().toLowerCase();
-  const rows = settled
-    .filter((row) => {
-      if (!search) return true;
-      return [row.invoiceNo, row.customerName, row.customerPhone, row.plateNumber]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(search));
-    })
-    .slice(0, options.limit ?? 100);
-
-  return {
-    rows,
-    count: settled.length,
-    total: settled.reduce((sum, row) => sum + (row.total - row.downPayment), 0),
-    monthCount: thisMonth.length,
-    monthTotal: thisMonth.reduce((sum, row) => sum + (row.total - row.downPayment), 0),
-  };
+  return { rows, ...summary };
 }
 
 export async function getAgingSummary(): Promise<{ bucket: string; count: number; total: number }[]> {
-  const today = todayISO();
-  const data = await getReceivables({ limit: 10_000 });
-  const buckets = new Map<string, { bucket: string; count: number; total: number }>([
-    ["lancar", { bucket: "Belum jatuh tempo", count: 0, total: 0 }],
-    ["1-7", { bucket: "1–7 hari", count: 0, total: 0 }],
-    ["8-30", { bucket: "8–30 hari", count: 0, total: 0 }],
-    [">30", { bucket: ">30 hari", count: 0, total: 0 }],
-  ]);
-  for (const row of data.rows) {
-    const bucket = buckets.get(agingBucket(row.dueDate, today));
-    if (bucket) {
-      bucket.count += 1;
-      bucket.total += row.remaining;
-    }
-  }
-  return [...buckets.values()];
+  const aging = await getReceivableAging(todayISO());
+  return [
+    { key: "lancar", bucket: "Belum jatuh tempo" },
+    { key: "1-7", bucket: "1–7 hari" },
+    { key: "8-30", bucket: "8–30 hari" },
+    { key: ">30", bucket: ">30 hari" },
+  ].map(({ key, bucket }) => ({ bucket, count: 0, total: 0, ...aging.get(key as AgingKey) }));
 }
