@@ -10,6 +10,16 @@ Setiap perubahan `items.stock` menulis baris `stock_movements` di transaksi data
 
 Migrasi `20261110000000_stock_movements` membuka ledger dengan satu baris `saldo_awal` per sparepart bersaldo positif; riwayat sebelum migrasi tidak direkonstruksi. Kartu stok tampil di halaman detail item (`/stok/[id]`).
 
+## Penyesuaian stok manual
+
+Pemilik menyesuaikan stok di halaman item (`/stok/[id]` → *Sesuaikan stok*) lewat `adjustStock` di `src/lib/stock.ts`. Setiap penyesuaian adalah dokumen `stock_adjustments` bernomor `PS-NNNNN`. Dokumen menyimpan alasan, keterangan wajib, stok sebelum/sesudah, nilai bertanda (modal batch), tanggal bisnis, dan pembuat. Mutasinya ditulis ke ledger dengan jenis `penyesuaian` dan `stock_adjustment_id`.
+
+- **Kurangi:** batch FIFO, atau satu batch yang dipilih (misalnya lot yang rusak). Alasan yang boleh: rusak, hilang, kedaluwarsa, dipakai internal, salah catat, lainnya.
+- **Tambah:** membuat batch baru berkode `PS-NNNNN` dengan modal yang diisi. Alasan yang boleh: ditemukan, salah catat, lainnya.
+- Form mengirim stok yang dilihat pengguna (`expectedStock`). Jika stok sudah berubah, misalnya karena ada penjualan atau klik ganda, penyimpanan ditolak.
+- Dokumen tidak bisa diedit atau dihapus dari aplikasi. Salah input dikoreksi dengan penyesuaian berlawanan. Constraint database menjaga `stock_after = stock_before + qty`, tanda `value` sama dengan tanda `qty`, dan keterangan tidak kosong.
+- Nilai bertanda dijumlahkan per `business_date` ke laba rugi sebagai *Selisih penyesuaian stok* (negatif = susut). Riwayat lintas item dan ekspor CSV ada di `/stok/penyesuaian`.
+
 ## Migrasi dan rilis
 
 - Migrasi `20261109030000_stock_batches` menambah tabel dan relasi nullable; saldo sparepart positif disalin menjadi `STOK-AWAL`. Saldo item dan nota historis tidak diubah.

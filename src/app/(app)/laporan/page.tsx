@@ -206,11 +206,19 @@ export default async function ReportPage({
                 <span className="font-semibold text-success tabular">+{formatRupiah(report.cancellationIncome)}</span>
               </div>
             )}
+            {report.stockAdjustment !== 0 && (
+              <div className="flex justify-between py-2 text-[12px]">
+                <Link href={`/stok/penyesuaian?month=${month}`} className="font-semibold text-muted underline">Selisih penyesuaian stok</Link>
+                <span className={cn("font-semibold tabular", report.stockAdjustment < 0 ? "text-danger" : "text-success")}>
+                  {report.stockAdjustment < 0 ? "−" : "+"}{formatRupiah(Math.abs(report.stockAdjustment))}
+                </span>
+              </div>
+            )}
             <div className="mt-1 flex items-center justify-between rounded-xl bg-pine px-4 py-3.5">
               <div>
                 <div className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-white/40">Laba bersih</div>
                 <div className="mt-0.5 text-[9px] font-medium text-white/30">
-                  Pendapatan − HPP − biaya{report.cancellationIncome > 0 ? " + pembatalan" : ""}
+                  Pendapatan − HPP − biaya{report.cancellationIncome > 0 ? " + pembatalan" : ""}{report.stockAdjustment !== 0 ? " ± selisih stok" : ""}
                 </div>
               </div>
               <div className="font-display text-[1.3rem] font-extrabold tracking-tight text-lime tabular">

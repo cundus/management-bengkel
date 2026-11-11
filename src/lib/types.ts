@@ -248,6 +248,8 @@ export type ReportData = {
   previousExpenses: number;
   netProfit: number;
   cancellationIncome: number;
+  // Nilai bertanda penyesuaian stok manual; negatif = susut/kerugian persediaan.
+  stockAdjustment: number;
   refunds: number;
   cashIn: number;
   cashOut: number;

@@ -45,7 +45,10 @@ export default async function InventoryPage({
         eyebrow="Persediaan"
         title="Stok & jasa"
         description="Katalog harga dan persediaan sparepart. Stok berkurang otomatis setiap transaksi."
-        actions={isOwner ? <><Link href="/pembelian/baru" className="btn-primary">Barang masuk / pembelian</Link><ItemDialog /></> : undefined}
+        actions={<>
+          <Link href="/stok/penyesuaian" className="btn-secondary">Riwayat penyesuaian</Link>
+          {isOwner && <><Link href="/pembelian/baru" className="btn-primary">Barang masuk / pembelian</Link><ItemDialog /></>}
+        </>}
       />
 
       <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-4">

@@ -76,6 +76,8 @@ describe("batch stok dengan PostgreSQL", () => {
       await apply("20261111000000_void_refunds");
       // 18:30 UTC = 01:30 WIB keesokan harinya.
       expect(await tx.$queryRawUnsafe(`SELECT voided_date::text AS d FROM transactions WHERE id = 'old-void'`)).toEqual([{ d: "2026-11-10" }]);
+      await apply("20261112000000_stock_adjustments");
+      expect(await tx.$queryRawUnsafe(`SELECT count(*)::int AS n FROM stock_adjustments`)).toEqual([{ n: 0 }]);
       throw new Error("rollback-migration-check");
     })).rejects.toThrow("rollback-migration-check");
   });

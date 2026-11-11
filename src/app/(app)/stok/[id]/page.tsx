@@ -9,6 +9,8 @@ import { formatNumber, formatRupiah } from "@/lib/format";
 import { dateOnlyToISO, formatDateID, todayISO } from "@/lib/dates";
 import { PageHeader } from "@/components/ui/page-header";
 import { BatchForm } from "@/components/inventory/batch-form";
+import { AdjustmentForm } from "@/components/inventory/adjustment-form";
+import { ADJUSTMENT_REASON_LABELS, adjustmentNumber } from "@/lib/stock-adjustments";
 import type { StockMovementType } from "@prisma/client";
 
 export const metadata: Metadata = { title: "Batch stok" };
@@ -20,6 +22,7 @@ const MOVEMENT_LABELS: Record<StockMovementType, string> = {
   pembelian: "Pembelian",
   penjualan: "Penjualan",
   pembatalan: "Pembatalan nota",
+  penyesuaian: "Penyesuaian",
 };
 const timestampFormat = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium", timeStyle: "short" });
 
@@ -42,6 +45,7 @@ export default async function StockBatchesPage({ params, searchParams }: {
       include: {
         stockBatch: { select: { code: true } },
         transaction: { select: { id: true, invoiceNo: true } },
+        stockAdjustment: { select: { id: true, reason: true } },
         createdBy: { select: { name: true } },
       },
     }) : [],
@@ -64,6 +68,15 @@ export default async function StockBatchesPage({ params, searchParams }: {
         </details>
       </>}
       {!item.isActive && <p className="text-sm text-muted">Aktifkan item untuk menerima batch baru.</p>}
+      {user.role === "owner" && (item.stock > 0 || item.isActive) && (
+        <details className="text-sm text-muted"><summary className="cursor-pointer">Sesuaikan stok (rusak, hilang, selisih hitung)</summary>
+          <div className="mt-3">
+            <AdjustmentForm itemId={item.id} stock={item.stock} unit={item.unit} cost={item.cost}
+              batches={item.stockBatches.filter((batch) => batch.remaining > 0).map(({ id: batchId, code, remaining, unitCost }) => ({ id: batchId, code, remaining, unitCost }))} />
+          </div>
+        </details>
+      )}
+      <Link href={`/stok/penyesuaian?item=${item.id}`} className="text-xs font-bold text-pine underline">Riwayat penyesuaian item ini</Link>
       <div className="flex items-center gap-1.5" role="tablist" aria-label="Tampilan persediaan">
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -122,7 +135,10 @@ export default async function StockBatchesPage({ params, searchParams }: {
                     {movement.purchaseId && (user.role === "owner"
                       ? <Link href={`/pembelian/${movement.purchaseId}`} className="text-pine underline">PB-{String(movement.purchaseId).padStart(5, "0")}</Link>
                       : <span>PB-{String(movement.purchaseId).padStart(5, "0")}</span>)}
-                    {!movement.transaction && !movement.purchaseId && <span className="text-muted">-</span>}
+                    {movement.stockAdjustment && <Link href={`/stok/penyesuaian?item=${item.id}#${adjustmentNumber(movement.stockAdjustment.id)}`} className="text-pine underline">
+                      {adjustmentNumber(movement.stockAdjustment.id)}</Link>}
+                    {movement.stockAdjustment && <p className="text-xs font-bold">{ADJUSTMENT_REASON_LABELS[movement.stockAdjustment.reason]}</p>}
+                    {!movement.transaction && !movement.purchaseId && !movement.stockAdjustment && <span className="text-muted">-</span>}
                     {movement.notes && <p className="max-w-xs whitespace-normal text-xs text-muted">{movement.notes}</p>}
                   </td>
                   <td>{movement.stockBatch?.code ?? "-"}</td>

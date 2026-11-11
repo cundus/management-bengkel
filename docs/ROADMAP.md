@@ -103,7 +103,7 @@ Prioritas dinilai berdasarkan **dampak operasional ÷ effort**.
 | 3 | Koreksi pembayaran (reversal, bukan hapus) | Akuntabilitas | M | Salah input bisa dibalik dengan entri reversal; laporan tetap auditabel. |
 | 4 | Backup otomatis provider + uji restore | Lindung data | S | Backup harian aktif, restore ke staging diuji dan didokumentasikan. |
 | 5 | Nota PDF + kirim WhatsApp | Pengalaman pelanggan | M | PDF rapi A5/thermal, tautan/attachment WhatsApp. |
-| 6 | Stock movement ledger + opname | Stok akurat | L | Semua masuk/keluar stok punya ledger; opname menghasilkan selisih. |
+| 6 | Stock movement ledger + opname | Stok akurat | L | Semua masuk/keluar stok punya ledger; opname menghasilkan selisih. **Ledger ✅, penyesuaian manual ✅ (PS-NNNNN, masuk laba rugi), opname massal belum.** |
 | 7 | Test kontrak query laporan | Cegah regresi uang | S | Snapshot angka laporan untuk dataset tetap. |
 
 ### P2 — pertumbuhan & efisiensi

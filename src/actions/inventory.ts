@@ -7,7 +7,8 @@ import { prisma } from "@/lib/db";
 import { ITEM_CATEGORIES, type ItemCategory } from "@/lib/constants";
 import type { ActionState } from "@/lib/action-state";
 import { isValidISODate, parseDateOnly, todayISO } from "@/lib/dates";
-import { lockStockItem, receiveStock } from "@/lib/stock";
+import { adjustStock, lockStockItem, receiveStock } from "@/lib/stock";
+import { adjustmentNumber, isAdjustmentReason } from "@/lib/stock-adjustments";
 
 function rupiah(value: FormDataEntryValue | null): number {
   return Number(String(value ?? "").replace(/[^\d]/g, "")) || 0;
@@ -105,6 +106,52 @@ export async function receiveStockBatchAction(_prev: ActionState, formData: Form
   }
   for (const path of ["/", "/stok", `/stok/${itemId}`, "/transaksi/baru"]) revalidatePath(path);
   return { ok: true, message: "Batch diterima dan stok bertambah." };
+}
+
+export async function adjustStockAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const user = await requireOwner();
+  const field = (name: string) => String(formData.get(name) ?? "").trim();
+  const itemId = Number(field("itemId"));
+  const direction = field("direction");
+  const qty = Number(field("qty"));
+  const reason = field("reason");
+  const notes = field("notes");
+  const expectedStock = Number(field("expectedStock"));
+  const stockBatchId = field("stockBatchId") ? Number(field("stockBatchId")) : undefined;
+  const unitCost = field("unitCost") ? Number(field("unitCost")) : undefined;
+
+  const fieldErrors: Record<string, string> = {};
+  if (!Number.isInteger(itemId) || itemId <= 0 || !Number.isInteger(expectedStock) || expectedStock < 0) {
+    return { ok: false, message: "Data item tidak valid. Muat ulang halaman." };
+  }
+  if (direction !== "kurang" && direction !== "tambah") fieldErrors.direction = "Pilih tambah atau kurangi stok.";
+  if (!Number.isInteger(qty) || qty <= 0 || qty > 2147483647) fieldErrors.qty = "Jumlah harus bilangan bulat di atas 0.";
+  if (!isAdjustmentReason(reason)) fieldErrors.reason = "Pilih alasan penyesuaian.";
+  if (notes.length < 5 || notes.length > 500) fieldErrors.notes = "Tulis keterangan 5–500 karakter (contoh: kemasan bocor saat dicek).";
+  if (direction === "kurang" && stockBatchId !== undefined && (!Number.isInteger(stockBatchId) || stockBatchId <= 0)) {
+    fieldErrors.stockBatchId = "Batch tidak valid.";
+  }
+  if (direction === "tambah" && (unitCost === undefined || !Number.isInteger(unitCost) || unitCost < 0 || unitCost > 2147483647)) {
+    fieldErrors.unitCost = "Modal per unit harus bilangan bulat minimal 0.";
+  }
+  if (Object.keys(fieldErrors).length > 0) return { ok: false, message: "Periksa kembali data penyesuaian.", fieldErrors };
+
+  let number: string;
+  try {
+    const adjustment = await prisma.$transaction((tx) => adjustStock(tx, {
+      itemId, direction: direction as "kurang" | "tambah", qty, reason: reason as Parameters<typeof adjustStock>[1]["reason"], notes, expectedStock,
+      stockBatchId: direction === "kurang" ? stockBatchId : undefined,
+      unitCost: direction === "tambah" ? unitCost : undefined,
+    }, { createdById: user.id }));
+    number = adjustmentNumber(adjustment.id);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      return { ok: false, message: error.code === "P2002" ? "Kode batch penyesuaian bentrok dengan batch lain. Coba lagi." : "Gagal menyimpan penyesuaian. Coba lagi." };
+    }
+    return { ok: false, message: error instanceof Error ? error.message : "Gagal menyimpan penyesuaian." };
+  }
+  for (const path of ["/", "/stok", `/stok/${itemId}`, "/stok/penyesuaian", "/transaksi/baru", "/laporan"]) revalidatePath(path);
+  return { ok: true, message: `Penyesuaian ${number} tersimpan.` };
 }
 
 export async function toggleItemAction(formData: FormData): Promise<void> {

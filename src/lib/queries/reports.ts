@@ -5,6 +5,7 @@ import { listTransactionInclude } from "./mappers";
 import type { ReportData } from "../types";
 import { marginByCategory } from "../calculations";
 import { getCancellationIncome, getRefundsByDate } from "./voids";
+import { getStockAdjustmentValue } from "./stock-adjustments";
 
 function previousMonth(month: string): string {
   const [year, monthNumber] = month.split("-").map(Number);
@@ -28,6 +29,7 @@ export async function getMonthlyReport(month: string): Promise<ReportData> {
     openRecords,
     refunds,
     cancellationIncome,
+    stockAdjustment,
   ] = await Promise.all([
     prisma.transaction.findMany({
       where: { status: "selesai", businessDate: { gte: startDate, lte: endDate } },
@@ -68,6 +70,7 @@ export async function getMonthlyReport(month: string): Promise<ReportData> {
     }),
     getRefundsByDate(startDate, endDate),
     getCancellationIncome(startDate, endDate),
+    getStockAdjustmentValue(startDate, endDate),
   ]);
 
   const revenue = transactions.reduce((sum, transaction) => sum + transaction.total, 0);
@@ -179,8 +182,9 @@ export async function getMonthlyReport(month: string): Promise<ReportData> {
     grossProfit: revenue - cogs,
     expenses: totalExpenses,
     previousExpenses: previousExpensesAggregate._sum.amount ?? 0,
-    netProfit: revenue - cogs - totalExpenses + cancellationIncome,
+    netProfit: revenue - cogs - totalExpenses + cancellationIncome + stockAdjustment,
     cancellationIncome,
+    stockAdjustment,
     refunds: refunds.total,
     cashIn,
     cashOut: totalExpenses + payableCashOut + refunds.total,

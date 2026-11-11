@@ -24,6 +24,8 @@ export async function GET(request: Request) {
     ["HPP", report.cogs],
     ["Laba kotor", report.grossProfit],
     ["Biaya operasional", report.expenses],
+    ["Pendapatan pembatalan", report.cancellationIncome],
+    ["Selisih penyesuaian stok", report.stockAdjustment],
     ["Laba bersih", report.netProfit],
     ["Kas diterima", report.cashIn],
     ["Kas keluar", report.cashOut],
