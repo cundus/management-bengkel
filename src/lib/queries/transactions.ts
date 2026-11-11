@@ -1,8 +1,8 @@
-import type { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { dateOnlyToISO, dateTimeToISO, todayISO } from "../dates";
 import { agingBucket, paymentStatus, remainingAmount, settledReceivable } from "../calculations";
 import { listTransactionInclude, mapTransactionList, openTransactionRecords } from "./mappers";
+import { findTransactionPage } from "./balances";
 import type {
   Payment,
   ReceivableFilter,
@@ -25,44 +25,25 @@ export async function listTransactions(options: {
   const pageSize = options.pageSize ?? 20;
   const page = Math.max(1, options.page ?? 1);
 
-  const searchWhere: Prisma.TransactionWhereInput = search
-    ? {
-        OR: [
-          { invoiceNo: { contains: search, mode: "insensitive" } },
-          { customer: { name: { contains: search, mode: "insensitive" } } },
-          { customer: { phone: { contains: search, mode: "insensitive" } } },
-          { vehicle: { plateNumber: { contains: search, mode: "insensitive" } } },
-          { vehicle: { brand: { contains: search, mode: "insensitive" } } },
-          { vehicle: { model: { contains: search, mode: "insensitive" } } },
-        ],
-      }
-    : {};
-  const where: Prisma.TransactionWhereInput =
-    status === "pengajuan" ? { ...searchWhere, status: "selesai", voidRequests: { some: { status: "pending" } } } : searchWhere;
-
-  const records = await prisma.transaction.findMany({
-    where,
-    include: listTransactionInclude,
-    orderBy: [{ createdAt: "desc" }, { businessDate: "desc" }],
-  });
-
-  const filtered = records
-    .map(mapTransactionList)
-    .filter((row) => {
-      if (status === "lunas") return row.paymentStatus === "lunas";
-      if (status === "belum_bayar") return row.paymentStatus === "belum_bayar";
-      if (status === "sebagian") return row.paymentStatus === "sebagian";
-      if (status === "batal") return row.status === "batal";
-      return true;
-    });
-
-  const total = filtered.length;
+  // Filter status bayar dan paginasi dikerjakan di database; hanya satu halaman nota yang dimuat.
+  const { ids, total } = await findTransactionPage({ search, status, limit: pageSize, offset: (page - 1) * pageSize });
   return {
-    rows: filtered.slice((page - 1) * pageSize, page * pageSize),
+    rows: await listRowsByIds(ids),
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / pageSize)),
   };
+}
+
+/** Muat baris daftar nota untuk ID tertentu, dengan urutan sama seperti `ids`. */
+export async function listRowsByIds(ids: string[]): Promise<TransactionListRow[]> {
+  if (ids.length === 0) return [];
+  const records = await prisma.transaction.findMany({ where: { id: { in: ids } }, include: listTransactionInclude });
+  const byId = new Map(records.map((record) => [record.id, record]));
+  return ids.flatMap((id) => {
+    const record = byId.get(id);
+    return record ? [mapTransactionList(record)] : [];
+  });
 }
 
 export async function getTransactionById(id: string): Promise<TransactionDetail | null> {

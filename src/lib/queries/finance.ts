@@ -1,6 +1,8 @@
 import { prisma } from "../db";
 import { dateOnlyToISO, dateTimeToISO, monthRange, parseDateOnly, todayISO } from "../dates";
 import type { Expense, Payable, PayablePayment, Supplier } from "../types";
+import { getOpenReceivableSummary } from "./balances";
+import { countLowStockItems } from "./navigation";
 
 export async function listExpenses(options?: { month?: string; limit?: number }): Promise<{
   rows: Expense[];
@@ -162,30 +164,14 @@ export async function getCounts(): Promise<{
   suppliers: number;
   outstandingTransactions: number;
 }> {
-  const [customers, vehicles, items, spares, suppliers, transactions] = await Promise.all([
+  const [customers, vehicles, items, lowStock, suppliers, receivables] = await Promise.all([
     prisma.customer.count(),
     prisma.vehicle.count(),
     prisma.item.count({ where: { isActive: true } }),
-    prisma.item.findMany({
-      where: { category: "sparepart", isActive: true },
-      select: { stock: true, minStock: true },
-    }),
+    countLowStockItems(),
     prisma.supplier.count(),
-    prisma.transaction.findMany({
-      where: { status: "selesai" },
-      select: { total: true, payments: { select: { amount: true } } },
-    }),
+    getOpenReceivableSummary(todayISO()),
   ]);
 
-  return {
-    customers,
-    vehicles,
-    items,
-    lowStock: spares.filter((item) => item.stock <= item.minStock).length,
-    suppliers,
-    outstandingTransactions: transactions.filter((transaction) => {
-      const paid = transaction.payments.reduce((sum, payment) => sum + payment.amount, 0);
-      return transaction.total - paid > 0;
-    }).length,
-  };
+  return { customers, vehicles, items, lowStock, suppliers, outstandingTransactions: receivables.count };
 }

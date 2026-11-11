@@ -1,7 +1,9 @@
 import { cache } from "react";
 import { prisma } from "../db";
 import { addDaysISO, dateOnlyToISO, daysBetween, lastNDates, parseDateOnly, startOfMonthISO, todayISO } from "../dates";
-import { listTransactionInclude, mapTransactionList, openTransactionRecords } from "./mappers";
+import { listTransactionInclude, mapTransactionList } from "./mappers";
+import { findOpenTransactionIdsDueBy, getOpenReceivableSummary } from "./balances";
+import { listRowsByIds } from "./transactions";
 import { getLowStockItems } from "./items";
 import { getCancellationIncome, getRefundsByDate } from "./voids";
 import type { DashboardData } from "../types";
@@ -13,7 +15,6 @@ async function buildDashboardData(): Promise<DashboardData> {
   const weekDates = lastNDates(7, today);
   const todayDate = parseDateOnly(today);
   const monthStartDate = parseDateOnly(monthStart);
-  const dueSoonLimit = parseDateOnly(addDaysISO(today, 7));
 
   const [
     todayTransactions,
@@ -22,7 +23,8 @@ async function buildDashboardData(): Promise<DashboardData> {
     monthTransactions,
     monthCashAggregate,
     monthExpenseAggregate,
-    openRecords,
+    receivableSummary,
+    dueSoonRows,
     payableRecords,
     weeklyTransactions,
     weeklyPayments,
@@ -58,11 +60,8 @@ async function buildDashboardData(): Promise<DashboardData> {
       where: { expenseDate: { gte: monthStartDate, lte: todayDate } },
       _sum: { amount: true },
     }),
-    prisma.transaction.findMany({
-      where: { status: "selesai" },
-      include: listTransactionInclude,
-      orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
-    }),
+    getOpenReceivableSummary(today, addDaysISO(today, 7)),
+    findOpenTransactionIdsDueBy(addDaysISO(today, 7), 4).then(listRowsByIds),
     prisma.payable.findMany({
       include: { payments: { select: { amount: true } } },
     }),
@@ -100,22 +99,13 @@ async function buildDashboardData(): Promise<DashboardData> {
     0,
   );
 
-  const open = openTransactionRecords(openRecords);
-  const receivables = open.reduce(
-    (acc, transaction) => {
-      acc.total += transaction.remaining;
-      acc.count += 1;
-      if (transaction.dueDate && transaction.dueDate < today) {
-        acc.overdueTotal += transaction.remaining;
-        acc.overdueCount += 1;
-      }
-      if (transaction.dueDate && transaction.dueDate >= today && transaction.dueDate <= addDaysISO(today, 7)) {
-        acc.dueSoonTotal += transaction.remaining;
-      }
-      return acc;
-    },
-    { total: 0, count: 0, overdueTotal: 0, overdueCount: 0, dueSoonTotal: 0 },
-  );
+  const receivables = {
+    total: receivableSummary.total,
+    count: receivableSummary.count,
+    overdueTotal: receivableSummary.overdueTotal,
+    overdueCount: receivableSummary.overdueCount,
+    dueSoonTotal: receivableSummary.dueSoonTotal,
+  };
 
   const payables = payableRecords.reduce(
     (acc, payable) => {
@@ -144,17 +134,10 @@ async function buildDashboardData(): Promise<DashboardData> {
     if (date >= weekDates[0]) cashByDate.set(date, (cashByDate.get(date) ?? 0) - amount);
   }
 
-  const dueSoon = open
-    .filter((transaction) => transaction.dueDate && transaction.dueDate <= dateOnlyToISO(dueSoonLimit))
-    .sort(
-      (a, b) =>
-        parseDateOnly(a.dueDate ?? today).getTime() - parseDateOnly(b.dueDate ?? today).getTime(),
-    )
-    .slice(0, 4)
-    .map(({ dueDateValue: _dueDateValue, ...transaction }) => ({
-      ...transaction,
-      daysLeft: transaction.dueDate ? daysBetween(today, transaction.dueDate) : 0,
-    }));
+  const dueSoon = dueSoonRows.map((transaction) => ({
+    ...transaction,
+    daysLeft: transaction.dueDate ? daysBetween(today, transaction.dueDate) : 0,
+  }));
 
   return {
     today,

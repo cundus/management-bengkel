@@ -1,7 +1,6 @@
 import { prisma } from "../db";
 import { addDaysISO, dateOnlyToISO, daysBetween, endOfMonthISO, monthRange, parseDateOnly, todayISO } from "../dates";
-import { openTransactionRecords } from "./mappers";
-import { listTransactionInclude } from "./mappers";
+import { getOpenReceivableSummary } from "./balances";
 import type { ReportData } from "../types";
 import { marginByCategory } from "../calculations";
 import { getCancellationIncome, getRefundsByDate } from "./voids";
@@ -247,18 +246,8 @@ export async function getAdjustmentSection(range: ReportRange): Promise<Adjustme
 // ── Posisi piutang saat ini (tidak terikat periode) ──────────────────────────
 
 export async function getReceivableSection(): Promise<{ outstanding: number; overdue: number }> {
-  const records = await prisma.transaction.findMany({
-    where: { status: "selesai" },
-    include: listTransactionInclude,
-  });
-  const today = todayISO();
-  let outstanding = 0;
-  let overdue = 0;
-  for (const transaction of openTransactionRecords(records)) {
-    outstanding += transaction.remaining;
-    if (transaction.dueDate && transaction.dueDate < today) overdue += transaction.remaining;
-  }
-  return { outstanding, overdue };
+  const summary = await getOpenReceivableSummary(todayISO());
+  return { outstanding: summary.total, overdue: summary.overdueTotal };
 }
 
 // ── Rumus gabungan (satu sumber untuk semua halaman & ekspor) ────────────────
