@@ -1,45 +1,41 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  ChartNoAxesCombined,
-  HandCoins,
-  LayoutDashboard,
-  Landmark,
-  LogOut,
-  PackageSearch,
-  Plus,
-  ReceiptText,
-  ShoppingCart,
-  Settings2,
-  Users,
-  WalletCards,
-  Grid2X2,
-  type LucideIcon,
-} from "lucide-react";
+import { ChevronDown, LogOut, Plus } from "lucide-react";
 import { BrandLogo } from "@/components/brand";
-import { PRIMARY_NAV, SECONDARY_NAV, isNavActive } from "./nav-config";
+import { allNavItems, navGroupsForRole, resolveActiveHref, type AppNavItem, type NavBadge } from "./nav-config";
 import { logoutAction } from "@/actions/auth";
 import { ROLE_LABELS, type UserRole } from "@/lib/constants";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { NavigationPending } from "./navigation-pending";
 
-const ICONS: Record<string, LucideIcon> = {
-  "/": LayoutDashboard,
-  "/transaksi": ReceiptText,
-  "/piutang": HandCoins,
-  "/laporan": ChartNoAxesCombined,
-  "/lainnya": Grid2X2,
-  "/pelanggan": Users,
-  "/stok": PackageSearch,
-  "/pembelian": ShoppingCart,
-  "/pengeluaran": WalletCards,
-  "/hutang": Landmark,
-  "/pengaturan": Settings2,
-  "/akun": Users,
+const COLLAPSED_KEY = "wmc225:sidebar-collapsed";
+
+const BADGE_STYLES: Record<NavBadge, string> = {
+  outstanding: "bg-brand text-white",
+  voidRequests: "bg-warning-soft text-warning",
+  lowStock: "bg-lime/20 text-lime",
 };
+
+function readCollapsed(): string[] {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(COLLAPSED_KEY) ?? "[]");
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCollapsed(ids: string[]) {
+  try {
+    window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(ids));
+  } catch {
+    // localStorage tidak tersedia (mode privat); status lipat cukup berlaku di sesi ini.
+  }
+}
 
 export function Sidebar({
   user,
@@ -53,28 +49,42 @@ export function Sidebar({
   voidRequestCount?: number;
 }) {
   const pathname = usePathname();
-  const primary = PRIMARY_NAV.filter((item) => item.href !== "/lainnya");
-  const secondary = SECONDARY_NAV.filter(
-    (item) => user.role === "owner" || !["/pembelian", "/pengeluaran", "/hutang", "/pengaturan", "/akun"].includes(item.href),
+  const groups = navGroupsForRole(user.role);
+  const activeHref = resolveActiveHref(
+    pathname,
+    allNavItems().map((item) => item.href),
   );
+  const [collapsed, setCollapsed] = useState<string[]>([]);
 
-  const renderItem = (item: (typeof PRIMARY_NAV)[number]) => {
-    const active = isNavActive(pathname, item.href);
-    const Icon = ICONS[item.href] ?? LayoutDashboard;
-    const badge =
-      item.href === "/piutang" && outstandingCount > 0
-        ? outstandingCount
-        : item.href === "/stok" && lowStockCount > 0
-          ? lowStockCount
-          : item.href === "/transaksi" && voidRequestCount > 0
-            ? voidRequestCount
-            : null;
+  useEffect(() => {
+    setCollapsed(readCollapsed());
+  }, []);
+
+  const toggle = (id: string) => {
+    setCollapsed((current) => {
+      const next = current.includes(id) ? current.filter((value) => value !== id) : [...current, id];
+      writeCollapsed(next);
+      return next;
+    });
+  };
+
+  const badgeCounts: Record<NavBadge, number> = {
+    outstanding: outstandingCount,
+    lowStock: lowStockCount,
+    voidRequests: voidRequestCount,
+  };
+
+  const renderItem = (item: AppNavItem) => {
+    const active = item.href === activeHref;
+    const Icon = item.icon;
+    const badge = item.badge && badgeCounts[item.badge] > 0 ? badgeCounts[item.badge] : null;
     return (
       <Link
         key={item.href}
         href={item.href}
+        aria-current={active ? "page" : undefined}
         className={cn(
-          "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-bold transition-all",
+          "group relative flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-bold transition-all",
           active
             ? "bg-white/[0.1] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
             : "text-white/55 hover:bg-white/[0.05] hover:text-white/90",
@@ -83,22 +93,18 @@ export function Sidebar({
         <NavigationPending />
         <span
           className={cn(
-            "flex size-8 items-center justify-center rounded-lg transition-colors",
+            "flex size-7 items-center justify-center rounded-lg transition-colors",
             active ? "bg-brand text-white" : "bg-white/[0.04] text-white/45 group-hover:text-white/80",
           )}
         >
-          <Icon size={16} strokeWidth={2.2} />
+          <Icon size={15} strokeWidth={2.2} />
         </span>
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
-        {badge ? (
+        {badge && item.badge ? (
           <span
             className={cn(
               "min-w-5 rounded-md px-1.5 py-0.5 text-center text-[10px] font-extrabold tabular",
-              item.href === "/piutang"
-                ? "bg-brand text-white"
-                : item.href === "/transaksi"
-                  ? "bg-warning-soft text-warning"
-                  : "bg-lime/20 text-lime",
+              BADGE_STYLES[item.badge],
             )}
           >
             {badge > 99 ? "99+" : badge}
@@ -125,14 +131,32 @@ export function Sidebar({
         </Link>
       </div>
 
-      <nav className="no-scrollbar relative flex-1 overflow-y-auto px-4 pb-6 pt-6">
-        <div className="mb-2 px-3 text-[10px] font-extrabold uppercase tracking-[0.2em] text-white/30">Menu utama</div>
-        <div className="space-y-1">{primary.map(renderItem)}</div>
-
-        <div className="mb-2 mt-7 px-3 text-[10px] font-extrabold uppercase tracking-[0.2em] text-white/30">
-          Operasional
-        </div>
-        <div className="space-y-1">{secondary.map(renderItem)}</div>
+      <nav className="no-scrollbar relative flex-1 overflow-y-auto px-4 pb-6 pt-5" aria-label="Navigasi utama">
+        {groups.map((group, index) => {
+          const hasActive = group.items.some((item) => item.href === activeHref);
+          // Grup dengan halaman aktif selalu terbuka supaya posisi pengguna tetap terlihat.
+          const open = hasActive || !collapsed.includes(group.id);
+          const isHome = group.id === "utama";
+          return (
+            <div key={group.id} className={cn(index > 0 && "mt-4")}>
+              {!isHome && (
+                <button
+                  type="button"
+                  onClick={() => toggle(group.id)}
+                  disabled={hasActive}
+                  aria-expanded={open}
+                  className="mb-1 flex w-full items-center justify-between rounded-lg px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.2em] text-white/30 transition hover:text-white/55 disabled:cursor-default disabled:hover:text-white/30"
+                >
+                  {group.label}
+                  {!hasActive && (
+                    <ChevronDown size={12} className={cn("transition-transform", !open && "-rotate-90")} />
+                  )}
+                </button>
+              )}
+              {open && <div className="space-y-0.5">{group.items.map(renderItem)}</div>}
+            </div>
+          );
+        })}
       </nav>
 
       <div className="relative m-4 mt-0 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-3">

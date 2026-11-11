@@ -25,7 +25,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </div>
-      <BottomNav outstandingCount={summary.overdue} voidRequestCount={user.role === "owner" ? summary.voidRequests : 0} />
+      <BottomNav role={user.role} outstandingCount={summary.overdue} voidRequestCount={user.role === "owner" ? summary.voidRequests : 0} />
     </div>
   );
 }

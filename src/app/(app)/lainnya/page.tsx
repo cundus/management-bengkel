@@ -1,20 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  BookOpen,
-  ChevronRight,
-  HandCoins,
-  Landmark,
-  LogOut,
-  PackageSearch,
-  ShoppingCart,
-  Settings2,
-  ShieldCheck,
-  Smartphone,
-  Users,
-  WalletCards,
-  Wrench,
-} from "lucide-react";
+import { BookOpen, ChevronRight, LogOut, ShieldCheck, Smartphone, Wrench } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { getCounts } from "@/lib/queries/finance";
 import { logoutAction } from "@/actions/auth";
@@ -23,6 +9,15 @@ import { InstallPrompt } from "@/components/pwa-install-prompt";
 import { ROLE_LABELS } from "@/lib/constants";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { navGroupsForRole } from "@/components/shell/nav-config";
+
+const GROUP_COLORS: Record<string, string> = {
+  penjualan: "bg-warning-soft text-warning",
+  inventori: "bg-[#f6e8e2] text-[#a54a2d]",
+  keuangan: "bg-[#f3e5cc] text-[#7a5a18]",
+  laporan: "bg-[#eef1e7] text-[#4b6143]",
+  sistem: "bg-[#ece3ef] text-[#62436b]",
+};
 
 export const metadata: Metadata = { title: "Lainnya" };
 
@@ -34,82 +29,18 @@ export default async function MorePage({
   const user = await requireUser();
   const counts = await getCounts();
   const params = await searchParams;
-  const isOwner = user.role === "owner";
 
-  const menus = [
-    {
-      href: "/pelanggan",
-      label: "Pelanggan & kendaraan",
-      description: "Profil, riwayat servis, dan kendaraan",
-      icon: Users,
-      stat: `${counts.customers} pelanggan`,
-      color: "bg-[#eef1e7] text-[#4b6143]",
-      show: true,
-    },
-    {
-      href: "/stok",
-      label: "Stok & jasa",
-      description: "Katalog harga, HPP, dan persediaan",
-      icon: PackageSearch,
-      stat: counts.lowStock > 0 ? `${counts.lowStock} stok menipis` : `${counts.items} item aktif`,
-      color: "bg-[#f6e8e2] text-[#a54a2d]",
-      show: true,
-    },
-    {
-      href: "/piutang",
-      label: "Piutang pelanggan",
-      description: "Tagihan yang belum dibayar",
-      icon: HandCoins,
-      stat: `${counts.outstandingTransactions} nota terbuka`,
-      color: "bg-warning-soft text-warning",
-      show: true,
-    },
-    {
-      href: "/pembelian",
-      label: "Pembelian",
-      description: "Barang masuk, batch stok, dan tagihan supplier",
-      icon: ShoppingCart,
-      stat: "Khusus pemilik",
-      color: "bg-[#eef1e7] text-[#4b6143]",
-      show: isOwner,
-    },
-    {
-      href: "/pengeluaran",
-      label: "Pengeluaran",
-      description: "Biaya operasional bengkel",
-      icon: WalletCards,
-      stat: "Khusus pemilik",
-      color: "bg-[#f3e5cc] text-[#7a5a18]",
-      show: isOwner,
-    },
-    {
-      href: "/hutang",
-      label: "Hutang supplier",
-      description: "Kewajiban usaha dan pembayarannya",
-      icon: Landmark,
-      stat: `${counts.suppliers} supplier`,
-      color: "bg-[#e1e9f3] text-[#365575]",
-      show: isOwner,
-    },
-    {
-      href: "/pengaturan",
-      label: "Pengaturan bengkel",
-      description: "Profil, nota, dan preferensi aplikasi",
-      icon: Settings2,
-      stat: "Konfigurasi",
-      color: "bg-[#ece3ef] text-[#62436b]",
-      show: isOwner,
-    },
-    {
-      href: "/akun",
-      label: "Manajemen akun",
-      description: "Akun pemilik, kasir, dan kata sandi",
-      icon: ShieldCheck,
-      stat: "Khusus pemilik",
-      color: "bg-[#ece3ef] text-[#62436b]",
-      show: isOwner,
-    },
-  ].filter((menu) => menu.show);
+  const stats: Record<string, string> = {
+    "/transaksi": "Nota servis & penjualan",
+    "/piutang": `${counts.outstandingTransactions} nota terbuka`,
+    "/pelanggan": `${counts.customers} pelanggan`,
+    "/stok": counts.lowStock > 0 ? `${counts.lowStock} stok menipis` : `${counts.items} item aktif`,
+    "/hutang": `${counts.suppliers} supplier`,
+  };
+  const groups = navGroupsForRole(user.role)
+    .map((group) => ({ ...group, items: group.items.filter((item) => item.href !== "/") }))
+    .filter((group) => group.items.length > 0);
+  const menuCount = groups.reduce((sum, group) => sum + group.items.length, 0);
 
   return (
     <div className="animate-fade-up">
@@ -163,29 +94,34 @@ export default async function MorePage({
         <InstallPrompt />
       </div>
 
-      <section className="mt-4">
-        <div className="mb-2 flex items-center justify-between px-1">
-          <h2 className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-faint">Semua fitur</h2>
-          <span className="text-[9px] font-semibold text-faint">{menus.length} menu</span>
-        </div>
-        <div className="card overflow-hidden divide-y divide-line/70">
-          {menus.map((menu) => (
-            <Link key={menu.href} href={menu.href} className="group flex items-center gap-3 px-4 py-3.5 transition hover:bg-[#faf7f1] sm:px-5">
-              <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", menu.color)}>
-                <menu.icon size={18} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-[12.5px] font-extrabold text-ink">{menu.label}</div>
-                <div className="mt-0.5 truncate text-[10px] font-medium text-faint">{menu.description}</div>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <span className="hidden text-[9px] font-bold text-faint sm:inline">{menu.stat}</span>
-                <ChevronRight size={15} className="text-faint transition group-hover:translate-x-0.5 group-hover:text-ink" />
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
+      <div className="mt-4 mb-2 flex items-center justify-between px-1">
+        <h2 className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-faint">Semua fitur</h2>
+        <span className="text-[9px] font-semibold text-faint">{menuCount} menu</span>
+      </div>
+      {groups.map((group) => (
+        <section key={group.id} className="mt-3" aria-labelledby={`grup-${group.id}`}>
+          <h3 id={`grup-${group.id}`} className="mb-1.5 px-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-faint">
+            {group.label}
+          </h3>
+          <div className="card overflow-hidden divide-y divide-line/70">
+            {group.items.map((menu) => (
+              <Link key={menu.href} href={menu.href} className="group flex items-center gap-3 px-4 py-3.5 transition hover:bg-[#faf7f1] sm:px-5">
+                <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", GROUP_COLORS[group.id] ?? "bg-[#f2eee6] text-muted")}>
+                  <menu.icon size={18} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12.5px] font-extrabold text-ink">{menu.label}</div>
+                  <div className="mt-0.5 truncate text-[10px] font-medium text-faint">{menu.description}</div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {stats[menu.href] && <span className="hidden text-[9px] font-bold text-faint sm:inline">{stats[menu.href]}</span>}
+                  <ChevronRight size={15} className="text-faint transition group-hover:translate-x-0.5 group-hover:text-ink" />
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ))}
 
       <section className="mt-4 grid gap-3 sm:grid-cols-2">
         <div className="card p-4">

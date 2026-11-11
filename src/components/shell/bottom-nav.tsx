@@ -2,34 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  ChartNoAxesCombined,
-  Grid2X2,
-  HandCoins,
-  LayoutDashboard,
-  ReceiptText,
-  type LucideIcon,
-} from "lucide-react";
-import { isNavActive } from "./nav-config";
+import { mobileNavForRole, resolveMobileActiveHref } from "./nav-config";
+import type { UserRole } from "@/lib/constants";
 import { cn } from "@/lib/cn";
 import { NavigationPending } from "./navigation-pending";
 
-const ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: "/", label: "Beranda", icon: LayoutDashboard },
-  { href: "/transaksi", label: "Transaksi", icon: ReceiptText },
-  { href: "/piutang", label: "Piutang", icon: HandCoins },
-  { href: "/laporan", label: "Laporan", icon: ChartNoAxesCombined },
-  { href: "/lainnya", label: "Lainnya", icon: Grid2X2 },
-];
-
 export function BottomNav({
+  role,
   outstandingCount = 0,
   voidRequestCount = 0,
 }: {
+  role: UserRole;
   outstandingCount?: number;
   voidRequestCount?: number;
 }) {
   const pathname = usePathname();
+  const items = mobileNavForRole(role);
+  const activeHref = resolveMobileActiveHref(pathname, items);
 
   return (
     <nav
@@ -38,8 +27,8 @@ export function BottomNav({
       aria-label="Navigasi utama"
     >
       <div className="grid grid-cols-5">
-        {ITEMS.map((item) => {
-          const active = isNavActive(pathname, item.href);
+        {items.map((item) => {
+          const active = item.href === activeHref;
           const Icon = item.icon;
           return (
             <Link

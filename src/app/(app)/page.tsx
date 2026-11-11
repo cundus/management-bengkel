@@ -39,6 +39,7 @@ const QUICK_ACTIONS = [
 
 export default async function DashboardPage() {
   const user = await requireUser();
+  const reportHref = user.role === "owner" ? "/laporan" : "/transaksi";
   const data = await getDashboardData();
   const trend = growth(data.todayRevenue, data.yesterdayRevenue);
   const greeting = getTodayGreeting();
@@ -182,7 +183,7 @@ export default async function DashboardPage() {
       </section>
 
       <section className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <Link href="/laporan" className="card group p-4 transition hover:-translate-y-0.5 hover:border-line-strong sm:p-5">
+        <Link href={reportHref} className="card group p-4 transition hover:-translate-y-0.5 hover:border-line-strong sm:p-5">
           <div className="flex items-center justify-between">
             <span className="icon-tile bg-brand-soft text-brand">
               <TrendingUp size={18} />
@@ -196,7 +197,7 @@ export default async function DashboardPage() {
           <div className="mt-1 text-[10px] font-medium text-muted">sampai hari ini</div>
         </Link>
 
-        <Link href="/laporan" className="card group p-4 transition hover:-translate-y-0.5 hover:border-line-strong sm:p-5">
+        <Link href={reportHref} className="card group p-4 transition hover:-translate-y-0.5 hover:border-line-strong sm:p-5">
           <div className="flex items-center justify-between">
             <span className="icon-tile bg-success-soft text-success">
               <CircleDollarSign size={18} />
