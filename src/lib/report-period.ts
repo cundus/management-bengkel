@@ -1,4 +1,4 @@
-import { getMonthlyReport, getReport } from "@/lib/queries/reports";
+import { getReportForRange, monthlyReportRange, reportRange, type ReportRange } from "@/lib/queries/reports";
 import { monthLabel, rangeLabel, resolveReportPeriod, type ReportPeriod } from "@/lib/dates";
 import type { ReportData } from "@/lib/types";
 
@@ -6,6 +6,8 @@ export type ReportSearchParams = { month?: string; from?: string; to?: string };
 
 export type ReportPeriodContext = {
   period: ReportPeriod;
+  /** Rentang tanggal + pembanding, dipakai oleh query bagian laporan. */
+  range: ReportRange;
   isDaily: boolean;
   /** Query string periode (tanpa `?`) untuk tautan antar-laporan dan ekspor. */
   query: string;
@@ -20,6 +22,7 @@ export function reportPeriodContext(params: ReportSearchParams): ReportPeriodCon
   const isDaily = period.mode === "harian";
   return {
     period,
+    range: isDaily ? reportRange(period.start, period.end) : monthlyReportRange(period.month),
     isDaily,
     query: isDaily ? `from=${period.start}&to=${period.end}` : `month=${period.month}`,
     label: isDaily ? rangeLabel(period.start, period.end) : monthLabel(period.month),
@@ -28,8 +31,9 @@ export function reportPeriodContext(params: ReportSearchParams): ReportPeriodCon
   };
 }
 
+/** Laporan lengkap (semua bagian). Halaman detail sebaiknya memanggil bagian yang ia butuhkan saja. */
 export function loadReport(ctx: ReportPeriodContext): Promise<ReportData> {
-  return ctx.isDaily ? getReport(ctx.period.start, ctx.period.end) : getMonthlyReport(ctx.period.month);
+  return getReportForRange(ctx.range);
 }
 
 /** Query periode dari URL apa adanya, untuk halaman laporan yang tidak memakai periode. */

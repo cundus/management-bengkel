@@ -264,14 +264,6 @@ export type ReportData = {
   topItems: { name: string; qty: number; revenue: number; category: "jasa" | "sparepart" }[];
   categoryMargins: Record<"jasa" | "sparepart", MarginSummary>;
   itemMargins: Record<"jasa" | "sparepart", MarginItem[]>;
-  recentPayments: {
-    id: number;
-    invoiceNo: string;
-    customerName: string;
-    amount: number;
-    method: string;
-    businessDate: string;
-  }[];
 };
 
 export type CustomerDetail = CustomerWithVehicles & {

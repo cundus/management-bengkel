@@ -2,7 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BarChart3, CircleDollarSign } from "lucide-react";
 import { requireOwner } from "@/lib/auth";
-import { loadReport, reportPeriodContext, type ReportSearchParams } from "@/lib/report-period";
+import { reportPeriodContext, type ReportSearchParams } from "@/lib/report-period";
+import {
+  getAdjustmentSection,
+  getExpenseSection,
+  getItemSalesSection,
+  getRevenueSection,
+  netProfitOf,
+} from "@/lib/queries/reports";
 import { ReportHeader } from "@/components/reports/report-header";
 import { growth } from "@/lib/calculations";
 import { rangeLabel } from "@/lib/dates";
@@ -14,7 +21,21 @@ export const metadata: Metadata = { title: "Laporan Laba Rugi" };
 export default async function ProfitLossPage({ searchParams }: { searchParams: Promise<ReportSearchParams> }) {
   await requireOwner();
   const ctx = reportPeriodContext(await searchParams);
-  const report = await loadReport(ctx);
+  const [revenue, items, expense, adjustment] = await Promise.all([
+    getRevenueSection(ctx.range),
+    getItemSalesSection(ctx.range),
+    getExpenseSection(ctx.range),
+    getAdjustmentSection(ctx.range),
+  ]);
+  const report = {
+    ...ctx.range,
+    ...revenue,
+    ...expense,
+    ...adjustment,
+    cogs: items.cogs,
+    grossProfit: revenue.revenue - items.cogs,
+    netProfit: netProfitOf(revenue, items, expense, adjustment),
+  };
   const totalExpense = report.expenseByCategory.reduce((sum, item) => sum + item.amount, 0);
   const expenseGrowth = growth(report.expenses, report.previousExpenses);
   const revenueGrowth = growth(report.revenue, report.previousRevenue);

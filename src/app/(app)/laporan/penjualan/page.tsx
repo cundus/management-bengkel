@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Package, ReceiptText, Wrench } from "lucide-react";
 import { requireOwner } from "@/lib/auth";
-import { loadReport, reportPeriodContext, type ReportSearchParams } from "@/lib/report-period";
+import { reportPeriodContext, type ReportSearchParams } from "@/lib/report-period";
+import { getItemSalesSection, getRevenueSection } from "@/lib/queries/reports";
 import { ReportHeader } from "@/components/reports/report-header";
 import { formatRupiah, percent } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -16,7 +17,8 @@ const MARGIN_GROUPS = [
 export default async function SalesReportPage({ searchParams }: { searchParams: Promise<ReportSearchParams> }) {
   await requireOwner();
   const ctx = reportPeriodContext(await searchParams);
-  const report = await loadReport(ctx);
+  const [revenue, items] = await Promise.all([getRevenueSection(ctx.range), getItemSalesSection(ctx.range, 10)]);
+  const report = { ...revenue, ...items };
 
   return (
     <div className="animate-fade-up">

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { ArrowDownRight, ArrowUpRight, CircleDollarSign, Landmark, WalletCards } from "lucide-react";
 import { requireOwner } from "@/lib/auth";
-import { loadReport, reportPeriodContext, type ReportSearchParams } from "@/lib/report-period";
+import { reportPeriodContext, type ReportSearchParams } from "@/lib/report-period";
+import { buildDaily, cashFlowOf, getCashSection, getExpenseSection, getRevenueSection } from "@/lib/queries/reports";
 import { ReportHeader } from "@/components/reports/report-header";
 import { formatRupiah, percent } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -23,7 +24,17 @@ const METHOD_LABELS: Record<string, string> = {
 export default async function CashFlowPage({ searchParams }: { searchParams: Promise<ReportSearchParams> }) {
   await requireOwner();
   const ctx = reportPeriodContext(await searchParams);
-  const report = await loadReport(ctx);
+  const [revenue, cash, expense] = await Promise.all([
+    getRevenueSection(ctx.range),
+    getCashSection(ctx.range),
+    getExpenseSection(ctx.range),
+  ]);
+  const report = {
+    ...cash,
+    ...cashFlowOf(cash, expense),
+    expenses: expense.expenses,
+    daily: buildDaily(ctx.range, revenue, cash),
+  };
   const supplierPayments = Math.max(0, report.cashOut - report.expenses - report.refunds);
   const activeDays = report.daily.filter((day) => day.revenue > 0 || day.cash > 0);
 
