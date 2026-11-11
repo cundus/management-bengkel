@@ -54,7 +54,7 @@ export async function listPayables(options?: { includePaid?: boolean }): Promise
     include: {
       supplier: true,
       purchase: { select: { id: true } },
-      payments: { orderBy: { paidAt: "desc" } },
+      payments: { include: { reversal: { select: { id: true } } }, orderBy: { paidAt: "desc" } },
     },
     orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
   });
@@ -69,6 +69,8 @@ export async function listPayables(options?: { includePaid?: boolean }): Promise
         businessDate: dateOnlyToISO(payment.businessDate),
         paidAt: dateTimeToISO(payment.paidAt),
         notes: payment.notes,
+        reversesPaymentId: payment.reversesPaymentId,
+        reversed: payment.reversal !== null,
       }));
       return {
         id: payable.id,

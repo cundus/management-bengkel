@@ -9,13 +9,19 @@ import {
   Landmark,
   MessageCircle,
   Phone,
+  Undo2,
 } from "lucide-react";
 import { requireOwner } from "@/lib/auth";
 import { getPayableSummary, listPayables, listSuppliers } from "@/lib/queries/finance";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DueBadge } from "@/components/ui/status-badge";
-import { PayableDialog, PayablePaymentDialog, SupplierDialog } from "@/components/finance/payable-dialogs";
+import {
+  PayableDialog,
+  PayablePaymentDialog,
+  ReversePayablePaymentDialog,
+  SupplierDialog,
+} from "@/components/finance/payable-dialogs";
 import { dueLabel, formatDateID } from "@/lib/dates";
 import { formatPhoneForWhatsApp, formatRupiah, percent } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -229,18 +235,49 @@ export default async function PayablesPage({ searchParams }: { searchParams: Pro
                   {payable.payments.length > 0 && (
                     <details className="mt-2.5">
                       <summary className="cursor-pointer text-[9.5px] font-bold text-brand hover:text-brand-dark">
-                        {payable.payments.length} pembayaran tercatat
+                        {payable.payments.length} entri pembayaran tercatat
                       </summary>
                       <div className="mt-2 space-y-1.5 rounded-lg bg-[#fbf9f4] px-3 py-2">
-                        {payable.payments.map((payment) => (
-                          <div key={payment.id} className="flex items-center justify-between text-[9.5px]">
-                            <span className="flex items-center gap-1.5 font-medium text-muted">
-                              <ArrowUpRight size={10} className="text-success" />
-                              {formatDateID(payment.businessDate)} · {payment.method}
-                            </span>
-                            <span className="font-extrabold text-ink tabular">{formatRupiah(payment.amount)}</span>
-                          </div>
-                        ))}
+                        {payable.payments.map((payment) => {
+                          const isReversal = payment.reversesPaymentId !== null;
+                          const canReverse = !isReversal && !payment.reversed;
+                          return (
+                            <div key={payment.id} className="text-[9.5px]">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="flex items-center gap-1.5 font-medium text-muted">
+                                  {isReversal ? (
+                                    <Undo2 size={10} className="text-danger" />
+                                  ) : (
+                                    <ArrowUpRight size={10} className={payment.reversed ? "text-faint" : "text-success"} />
+                                  )}
+                                  {formatDateID(payment.businessDate)} · {payment.method}
+                                  {isReversal ? " · koreksi" : payment.reversed ? " · dibalik" : ""}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "font-extrabold tabular",
+                                    isReversal ? "text-danger" : payment.reversed ? "text-faint line-through" : "text-ink",
+                                  )}
+                                >
+                                  {isReversal ? `−${formatRupiah(-payment.amount)}` : formatRupiah(payment.amount)}
+                                </span>
+                              </div>
+                              {(payment.notes || canReverse) && (
+                                <div className="mt-0.5 flex items-center justify-between gap-2 pl-4 text-[9px] text-faint">
+                                  <span className="italic">{payment.notes}</span>
+                                  {canReverse && (
+                                    <ReversePayablePaymentDialog
+                                      paymentId={payment.id}
+                                      amount={payment.amount}
+                                      method={payment.method}
+                                      businessDate={payment.businessDate}
+                                    />
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </details>
                   )}

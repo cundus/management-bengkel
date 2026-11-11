@@ -3,11 +3,16 @@
 import { useActionState, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { AlertCircle, LoaderCircle, Plus, Store, Wallet, X } from "lucide-react";
-import { createPayableAction, createSupplierAction, recordPayablePaymentAction } from "@/actions/finance";
+import { AlertCircle, LoaderCircle, Plus, Store, Undo2, Wallet, X } from "lucide-react";
+import {
+  createPayableAction,
+  createSupplierAction,
+  recordPayablePaymentAction,
+  reversePayablePaymentAction,
+} from "@/actions/finance";
 import { initialActionState } from "@/lib/action-state";
-import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from "@/lib/constants";
-import { todayISO } from "@/lib/dates";
+import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/constants";
+import { formatDateID, todayISO } from "@/lib/dates";
 import { formatRupiah } from "@/lib/format";
 import type { Supplier } from "@/lib/types";
 
@@ -338,6 +343,79 @@ export function PayablePaymentDialog({
           <button type="submit" disabled={pending} className="btn-primary h-11 w-full">
             {pending ? <LoaderCircle size={14} className="animate-spin" /> : <Wallet size={14} />}
             Catat pembayaran
+          </button>
+        </form>
+      </DialogFrame>
+    </>
+  );
+}
+
+// Pemilik membalik pembayaran hutang yang salah input. Pembayaran asli tetap tercatat.
+export function ReversePayablePaymentDialog({
+  paymentId,
+  amount,
+  method,
+  businessDate,
+}: {
+  paymentId: number;
+  amount: number;
+  method: PaymentMethod;
+  businessDate: string;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [state, action, pending] = useActionState(reversePayablePaymentAction, initialActionState);
+
+  useEffect(() => {
+    if (state.ok) {
+      setOpen(false);
+      router.refresh();
+    }
+  }, [state, router]);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1 text-[9px] font-bold text-muted underline-offset-2 hover:text-danger hover:underline"
+      >
+        <Undo2 size={10} /> Koreksi
+      </button>
+      <DialogFrame
+        open={open}
+        onClose={() => !pending && setOpen(false)}
+        eyebrow="Koreksi pembayaran hutang"
+        title={`Balik ${formatRupiah(amount)}?`}
+        description={`${PAYMENT_METHOD_LABELS[method]} · ${formatDateID(businessDate)}`}
+      >
+        <form action={action} className="space-y-3.5">
+          <input type="hidden" name="paymentId" value={paymentId} />
+          {state.message && !state.ok && (
+            <div className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2.5 text-[10.5px] font-semibold text-danger">
+              <AlertCircle size={13} className="mt-0.5 shrink-0" /> {state.message}
+            </div>
+          )}
+          <p className="rounded-xl border border-line bg-[#fbf9f4] px-3.5 py-3 text-[10.5px] leading-relaxed text-muted">
+            Pembayaran asli tetap tercatat. Entri koreksi −{formatRupiah(amount)} dicatat hari ini, sisa hutang bertambah,
+            dan kas keluar hari ini berkurang. Catat ulang pembayaran yang benar bila perlu.
+          </p>
+          <div>
+            <label htmlFor={`payable-reverse-reason-${paymentId}`} className="label">
+              Alasan koreksi
+            </label>
+            <input
+              id={`payable-reverse-reason-${paymentId}`}
+              name="reason"
+              required
+              maxLength={300}
+              placeholder="Contoh: nominal salah ketik"
+              className="input"
+            />
+          </div>
+          <button type="submit" disabled={pending} className="btn-danger h-11 w-full">
+            {pending ? <LoaderCircle size={14} className="animate-spin" /> : <Undo2 size={14} />}
+            Balik pembayaran
           </button>
         </form>
       </DialogFrame>

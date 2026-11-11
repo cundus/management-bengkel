@@ -68,7 +68,7 @@ export async function getTransactionById(id: string): Promise<TransactionDetail 
         orderBy: { requestedAt: "desc" },
       },
       items: { orderBy: { id: "asc" }, include: { stockBatch: { select: { code: true } } } },
-      payments: { include: { receivedBy: true }, orderBy: { paidAt: "desc" } },
+      payments: { include: { receivedBy: true, reversal: { select: { id: true } } }, orderBy: { paidAt: "desc" } },
     },
   });
   if (!record) return null;
@@ -93,6 +93,8 @@ export async function getTransactionById(id: string): Promise<TransactionDetail 
     businessDate: dateOnlyToISO(payment.businessDate),
     paidAt: dateTimeToISO(payment.paidAt),
     receivedByName: payment.receivedBy.name,
+    reversesPaymentId: payment.reversesPaymentId,
+    reversed: payment.reversal !== null,
   }));
   const vehicle: Vehicle | null = record.vehicle
     ? {
@@ -208,7 +210,9 @@ export async function getSettledReceivables(options: { search?: string; limit?: 
       customer: true,
       vehicle: true,
       voidRequests: { where: { status: "pending" }, select: { id: true } },
+      // Pasangan pembayaran + koreksinya saling meniadakan; abaikan keduanya.
       payments: {
+        where: { reversesPaymentId: null, reversal: { is: null } },
         select: { amount: true, method: true, businessDate: true },
         orderBy: [{ businessDate: "asc" }, { paidAt: "asc" }],
       },

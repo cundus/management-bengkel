@@ -194,3 +194,47 @@ export async function updateSettingsAction(_prev: ActionState, formData: FormDat
   revalidatePath("/");
   return { ok: true, message: "Pengaturan bengkel disimpan." };
 }
+
+// Koreksi salah input pembayaran hutang dengan entri pembalik bernominal negatif di tanggal hari ini.
+export async function reversePayablePaymentAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const user = await requireOwner();
+  const paymentId = Number(formData.get("paymentId"));
+  const reason = text(formData.get("reason"));
+  if (!Number.isInteger(paymentId) || paymentId <= 0) return { ok: false, message: "Pembayaran tidak valid." };
+  if (!reason) return { ok: false, message: "Alasan koreksi wajib diisi." };
+
+  const target = await prisma.payablePayment.findUnique({ where: { id: paymentId }, select: { payableId: true } });
+  if (!target) return { ok: false, message: "Pembayaran tidak ditemukan." };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM payables WHERE id = ${target.payableId} FOR UPDATE`;
+      const payment = await tx.payablePayment.findUniqueOrThrow({
+        where: { id: paymentId },
+        select: { amount: true, method: true, reversesPaymentId: true, reversal: { select: { id: true } } },
+      });
+      if (payment.reversesPaymentId !== null) throw new Error("Entri koreksi tidak bisa dibalik lagi.");
+      if (payment.reversal) throw new Error("Pembayaran ini sudah dikoreksi.");
+
+      await tx.payablePayment.create({
+        data: {
+          payableId: target.payableId,
+          amount: -payment.amount,
+          method: payment.method,
+          notes: reason,
+          businessDate: parseDateOnly(todayISO()),
+          paidById: user.id,
+          reversesPaymentId: paymentId,
+        },
+      });
+    });
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Gagal mengoreksi pembayaran." };
+  }
+
+  revalidatePath("/hutang");
+  revalidatePath("/pembelian", "layout");
+  revalidatePath("/laporan", "layout");
+  revalidatePath("/");
+  return { ok: true, message: "Pembayaran hutang dibalik. Catat ulang pembayaran yang benar bila perlu." };
+}

@@ -387,3 +387,55 @@ export async function rejectVoidRequestAction(_prev: ActionState, formData: Form
   revalidatePath(`/transaksi/${request.transactionId}`);
   return { ok: true, message: "Pengajuan pembatalan ditolak." };
 }
+
+// Koreksi salah input pembayaran: pemilik membalik pembayaran dengan entri bernominal negatif
+// di tanggal hari ini. Pembayaran asli tetap tersimpan sehingga kas hari itu tidak berubah.
+export async function reversePaymentAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const user = await requireOwner();
+  const id = String(formData.get("transactionId") ?? "");
+  const paymentId = Number(formData.get("paymentId"));
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!Number.isInteger(paymentId) || paymentId <= 0) return { ok: false, message: "Pembayaran tidak valid." };
+  if (!reason) return { ok: false, message: "Alasan koreksi wajib diisi." };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM transactions WHERE id = ${id} FOR UPDATE`;
+      const transaction = await tx.transaction.findUnique({ where: { id }, select: { status: true } });
+      if (!transaction) throw new Error("Transaksi tidak ditemukan.");
+      if (transaction.status === "batal") {
+        throw new Error("Pembayaran pada nota yang dibatalkan tidak bisa dikoreksi; gunakan refund saat pembatalan.");
+      }
+      const payment = await tx.payment.findUnique({
+        where: { id: paymentId },
+        select: { transactionId: true, amount: true, method: true, reversesPaymentId: true, reversal: { select: { id: true } } },
+      });
+      if (!payment || payment.transactionId !== id) throw new Error("Pembayaran tidak ditemukan.");
+      if (payment.reversesPaymentId !== null) throw new Error("Entri koreksi tidak bisa dibalik lagi.");
+      if (payment.reversal) throw new Error("Pembayaran ini sudah dikoreksi.");
+
+      await tx.payment.create({
+        data: {
+          transactionId: id,
+          amount: -payment.amount,
+          method: payment.method,
+          notes: reason.slice(0, 300),
+          businessDate: parseDateOnly(todayISO()),
+          paidAt: new Date(),
+          receivedById: user.id,
+          reversesPaymentId: paymentId,
+        },
+      });
+    });
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Gagal mengoreksi pembayaran." };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/transaksi");
+  revalidatePath(`/transaksi/${id}`);
+  revalidatePath("/piutang");
+  revalidatePath("/laporan", "layout");
+  revalidatePath("/pelanggan");
+  return { ok: true, message: "Pembayaran dibalik. Catat ulang pembayaran yang benar bila perlu." };
+}

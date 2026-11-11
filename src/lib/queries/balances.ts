@@ -6,7 +6,8 @@ import type { TransaksiStatusFilter } from "../types";
  * Saldo nota dihitung di database, bukan dengan memuat semua nota + pembayaran
  * ke JavaScript. Aturannya sama dengan `paymentStatus`/`remainingAmount` di
  * `calculations.ts`:
- *   paid      = SUM(payments.amount) per nota (0 jika belum ada pembayaran)
+ *   paid      = SUM(payments.amount) per nota (0 jika belum ada pembayaran);
+ *               entri koreksi bernominal negatif sehingga otomatis mengurangi
  *   remaining = MAX(0, total − paid) untuk nota selesai; 0 untuk nota batal
  *   status    = batal | lunas (remaining = 0) | sebagian (paid > 0) | belum_bayar
  */
@@ -205,6 +206,9 @@ const SETTLED_CTE = Prisma.sql`
       t.total - COALESCE(SUM(pay.amount) FILTER (WHERE pay.business_date <= t.business_date), 0) AS settled_amount
     FROM transactions t
     JOIN payments pay ON pay.transaction_id = t.id
+      -- Pasangan pembayaran + entri koreksinya saling meniadakan; abaikan keduanya.
+      AND pay.reverses_payment_id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM payments r WHERE r.reverses_payment_id = pay.id)
     WHERE t.status = 'selesai'
     GROUP BY t.id
     HAVING SUM(pay.amount) >= t.total AND MAX(pay.business_date) > t.business_date

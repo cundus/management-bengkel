@@ -100,6 +100,10 @@ export type Payment = {
   businessDate: string;
   paidAt: string;
   receivedByName: string;
+  /** Diisi bila entri ini koreksi (nominal negatif) atas pembayaran lain. */
+  reversesPaymentId: number | null;
+  /** Pembayaran ini sudah dibalik oleh entri koreksi. */
+  reversed: boolean;
 };
 
 export type TransactionDetail = TransactionListRow & {
@@ -186,6 +190,8 @@ export type PayablePayment = {
   businessDate: string;
   paidAt: string;
   notes: string | null;
+  reversesPaymentId: number | null;
+  reversed: boolean;
 };
 
 export type DashboardData = {

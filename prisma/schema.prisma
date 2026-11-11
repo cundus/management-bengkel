@@ -272,16 +272,21 @@ model StockAdjustment {
 }
 
 model Payment {
-  id            Int           @id @default(autoincrement())
-  transactionId String        @map("transaction_id")
-  amount        Int
-  method        PaymentMethod
-  notes         String?
-  businessDate  DateTime      @map("business_date") @db.Date
-  paidAt        DateTime      @default(now()) @map("paid_at")
-  receivedById  Int           @map("received_by")
-  transaction   Transaction   @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  receivedBy    User          @relation("PaymentReceiver", fields: [receivedById], references: [id])
+  id                Int           @id @default(autoincrement())
+  transactionId     String        @map("transaction_id")
+  amount            Int
+  method            PaymentMethod
+  notes             String?
+  businessDate      DateTime      @map("business_date") @db.Date
+  paidAt            DateTime      @default(now()) @map("paid_at")
+  receivedById      Int           @map("received_by")
+  /// Diisi pada entri koreksi (nominal negatif) yang membalik pembayaran lain. Pembayaran
+  /// tidak pernah diubah/dihapus; salah input dikoreksi dengan entri pembalik.
+  reversesPaymentId Int?          @unique @map("reverses_payment_id")
+  transaction       Transaction   @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  receivedBy        User          @relation("PaymentReceiver", fields: [receivedById], references: [id])
+  reverses          Payment?      @relation("PaymentReversal", fields: [reversesPaymentId], references: [id], onDelete: NoAction)
+  reversal          Payment?      @relation("PaymentReversal")
 
   @@index([transactionId])
   @@index([businessDate])
@@ -396,16 +401,20 @@ model Purchase {
 }
 
 model PayablePayment {
-  id           Int           @id @default(autoincrement())
-  payableId    Int           @map("payable_id")
-  amount       Int
-  method       PaymentMethod
-  notes        String?
-  businessDate DateTime      @map("business_date") @db.Date
-  paidAt       DateTime      @default(now()) @map("paid_at")
-  paidById     Int           @map("paid_by")
-  payable      Payable       @relation(fields: [payableId], references: [id], onDelete: Cascade)
-  paidBy       User          @relation("PayablePaymentCreator", fields: [paidById], references: [id])
+  id                Int             @id @default(autoincrement())
+  payableId         Int             @map("payable_id")
+  amount            Int
+  method            PaymentMethod
+  notes             String?
+  businessDate      DateTime        @map("business_date") @db.Date
+  paidAt            DateTime        @default(now()) @map("paid_at")
+  paidById          Int             @map("paid_by")
+  /// Entri koreksi (nominal negatif) yang membalik pembayaran hutang lain.
+  reversesPaymentId Int?            @unique @map("reverses_payment_id")
+  payable           Payable         @relation(fields: [payableId], references: [id], onDelete: Cascade)
+  paidBy            User            @relation("PayablePaymentCreator", fields: [paidById], references: [id])
+  reverses          PayablePayment? @relation("PayablePaymentReversal", fields: [reversesPaymentId], references: [id], onDelete: NoAction)
+  reversal          PayablePayment? @relation("PayablePaymentReversal")
 
   @@index([payableId])
   @@map("payable_payments")

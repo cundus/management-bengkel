@@ -1,6 +1,6 @@
 # Roadmap WMC 225
 
-Roadmap ini disusun dari masalah operasional bengkel → alur data → fitur → verifikasi. Status per **9 November 2026**.
+Roadmap ini disusun dari masalah operasional bengkel → alur data → fitur → verifikasi. Status per **12 November 2026**.
 
 ## Ringkasan status
 
@@ -98,9 +98,9 @@ Prioritas dinilai berdasarkan **dampak operasional ÷ effort**.
 
 | # | Inisiatif | Nilai | Effort | Acceptance criteria |
 | --- | --- | --- | --- | --- |
-| 1 | Manajemen pengguna & reset kata sandi | Keamanan operasional | M | Owner bisa undang/nonaktifkan kasir, reset password, sesi lama invalid. |
+| 1 | Manajemen pengguna & reset kata sandi | Keamanan operasional | M | Owner bisa undang/nonaktifkan kasir, reset password, sesi lama invalid. **Tambah/edit akun ✅, reset password + sesi lama invalid ✅, nonaktifkan akun belum.** |
 | 2 | Audit log transaksi & pembayaran | Kepercayaan data | M | Setiap create/update/void/payment tercatat aktor + waktu + before/after. |
-| 3 | Koreksi pembayaran (reversal, bukan hapus) | Akuntabilitas | M | Salah input bisa dibalik dengan entri reversal; laporan tetap auditabel. |
+| 3 | Koreksi pembayaran (reversal, bukan hapus) | Akuntabilitas | M | Salah input bisa dibalik dengan entri reversal; laporan tetap auditabel. **✅ Pembayaran pelanggan & hutang supplier: entri pembalik bernominal negatif (owner, alasan wajib), dijaga constraint + trigger database.** |
 | 4 | Backup otomatis provider + uji restore | Lindung data | S | Backup harian aktif, restore ke staging diuji dan didokumentasikan. |
 | 5 | Nota PDF + kirim WhatsApp | Pengalaman pelanggan | M | PDF rapi A5/thermal, tautan/attachment WhatsApp. |
 | 6 | Stock movement ledger + opname | Stok akurat | L | Semua masuk/keluar stok punya ledger; opname menghasilkan selisih. **Ledger ✅, penyesuaian manual ✅ (PS-NNNNN, masuk laba rugi), opname massal belum.** |
@@ -164,7 +164,7 @@ Teknis:
 | Risiko | Dampak | Mitigasi |
 | --- | --- | --- |
 | Database provider down / koneksi habis | Tinggi | Pooled connection, connection limit, backup provider, monitoring, dan prosedur restore. |
-| Kasir salah input pembayaran | Sedang | Reversal (P1), audit log, role owner untuk void. |
+| Kasir salah input pembayaran | Sedang | Reversal oleh pemilik ✅, audit log (P1), role owner untuk void. |
 | Stok fisik ≠ sistem | Sedang | Ledger & opname (P1), jadwal opname mingguan. |
 | Kebocoran akses | Tinggi | Secret kuat, sesi HttpOnly, role gate, rate limit login di v1.1. |
 | Adopsi rendah karena UI rumit | Tinggi | Uji ke bengkel pilot, golden path < 60 detik, pelatihan singkat. |

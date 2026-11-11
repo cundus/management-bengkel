@@ -9,7 +9,7 @@ import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/li
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
-function Dialog({
+export function Dialog({
   open,
   pending,
   onClose,
@@ -90,7 +90,7 @@ function Dialog({
   );
 }
 
-function ErrorText({ message }: { message?: string }) {
+export function ErrorText({ message }: { message?: string }) {
   if (!message) return null;
   return (
     <p role="alert" className="mt-2 text-[11px] font-semibold text-danger">

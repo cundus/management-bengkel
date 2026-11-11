@@ -26,6 +26,7 @@ import { formatPhoneForWhatsApp, formatRupiah } from "@/lib/format";
 import { PaymentBadge, DueBadge } from "@/components/ui/status-badge";
 import { PrintButton, ReceiptButton } from "@/components/transactions/print-button";
 import { PaymentForm } from "@/components/transactions/payment-form";
+import { ReversePaymentButton } from "@/components/transactions/reverse-payment-form";
 import {
   RejectVoidRequestButton,
   RequestVoidButton,
@@ -496,26 +497,52 @@ export default async function TransactionDetailPage({
               </p>
             ) : (
               <div className="space-y-0">
-                {transaction.payments.map((payment, index) => (
-                  <div key={payment.id} className="relative flex gap-3 pb-4 last:pb-0">
-                    {index < transaction.payments.length - 1 && (
-                      <div className="absolute left-[11px] top-6 h-full w-px bg-line" />
-                    )}
-                    <div className="relative z-10 flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-surface bg-success-soft text-success">
-                      <CheckCircle2 size={12} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-[11px] font-extrabold text-ink tabular">{formatRupiah(payment.amount)}</span>
-                        <span className="text-[9px] font-semibold capitalize text-faint">{payment.method}</span>
+                {transaction.payments.map((payment, index) => {
+                  const isReversal = payment.reversesPaymentId !== null;
+                  return (
+                    <div key={payment.id} className="relative flex gap-3 pb-4 last:pb-0">
+                      {index < transaction.payments.length - 1 && (
+                        <div className="absolute left-[11px] top-6 h-full w-px bg-line" />
+                      )}
+                      <div
+                        className={`relative z-10 flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-surface ${
+                          isReversal ? "bg-danger-soft text-danger" : payment.reversed ? "bg-[#f2eee6] text-faint" : "bg-success-soft text-success"
+                        }`}
+                      >
+                        {isReversal ? <Undo2 size={12} /> : <CheckCircle2 size={12} />}
                       </div>
-                      <div className="mt-0.5 text-[9px] font-medium text-faint">
-                        {formatDateID(payment.businessDate)} · oleh {payment.receivedByName}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span
+                            className={`text-[11px] font-extrabold tabular ${
+                              isReversal ? "text-danger" : payment.reversed ? "text-faint line-through" : "text-ink"
+                            }`}
+                          >
+                            {isReversal ? `−${formatRupiah(-payment.amount)}` : formatRupiah(payment.amount)}
+                          </span>
+                          <span className="text-[9px] font-semibold capitalize text-faint">
+                            {isReversal ? `Koreksi · ${payment.method}` : payment.reversed ? `${payment.method} · dibalik` : payment.method}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center justify-between gap-x-2 text-[9px] font-medium text-faint">
+                          <span>
+                            {formatDateID(payment.businessDate)} · oleh {payment.receivedByName}
+                          </span>
+                          {user.role === "owner" && active && !isReversal && !payment.reversed && (
+                            <ReversePaymentButton
+                              transactionId={transaction.id}
+                              paymentId={payment.id}
+                              amount={payment.amount}
+                              method={payment.method}
+                              businessDate={payment.businessDate}
+                            />
+                          )}
+                        </div>
+                        {payment.notes && <div className="mt-0.5 text-[9px] italic text-faint">“{payment.notes}”</div>}
                       </div>
-                      {payment.notes && <div className="mt-0.5 text-[9px] italic text-faint">“{payment.notes}”</div>}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
@@ -524,7 +551,7 @@ export default async function TransactionDetailPage({
             <div className="flex items-start gap-2 rounded-xl border border-line bg-surface/60 px-3.5 py-3">
               <ShieldCheck size={14} className="mt-0.5 shrink-0 text-success" />
               <p className="text-[9.5px] leading-relaxed text-muted">
-                Setiap pembayaran tercatat permanen dan otomatis memperbarui laporan pendapatan.
+                Setiap pembayaran tercatat permanen dan otomatis memperbarui laporan pendapatan. Salah input dikoreksi dengan entri pembalik, bukan dihapus.
               </p>
             </div>
             <div className="flex items-center justify-center gap-1.5 text-[9px] font-semibold text-faint">

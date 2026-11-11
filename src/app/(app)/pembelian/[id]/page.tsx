@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { formatNumber, formatRupiah } from "@/lib/format";
 import { dateOnlyToISO, formatDateID } from "@/lib/dates";
 import { PageHeader } from "@/components/ui/page-header";
-import { PayablePaymentDialog } from "@/components/finance/payable-dialogs";
+import { PayablePaymentDialog, ReversePayablePaymentDialog } from "@/components/finance/payable-dialogs";
 
 export const metadata: Metadata = { title: "Detail pembelian" };
 
@@ -15,7 +15,7 @@ export default async function PurchaseDetailPage({ params }: { params: Promise<{
   const id = Number((await params).id);
   if (!Number.isInteger(id) || id <= 0) notFound();
   const purchase = await prisma.purchase.findUnique({ where: { id }, include: {
-    supplier: true, createdBy: true, payable: { include: { payments: { orderBy: { paidAt: "desc" } } } },
+    supplier: true, createdBy: true, payable: { include: { payments: { include: { reversal: { select: { id: true } } }, orderBy: { paidAt: "desc" } } } },
     batches: { include: { item: true }, orderBy: { id: "asc" } },
   } });
   if (!purchase) notFound();
@@ -40,7 +40,20 @@ export default async function PurchaseDetailPage({ params }: { params: Promise<{
       <h2 className="font-display text-lg font-extrabold">Pembayaran supplier</h2>
       <p className="text-sm text-muted">{remaining > 0 ? "Pembayaran di sini terhubung ke tagihan yang sama di Hutang Supplier." : "Pembelian sudah lunas."}{purchase.payable.dueDate ? ` Jatuh tempo ${formatDateID(dateOnlyToISO(purchase.payable.dueDate))}.` : ""}</p>
       {remaining > 0 && <PayablePaymentDialog payableId={purchase.payableId} supplierName={purchase.supplier.name} remaining={remaining} />}
-      {purchase.payable.payments.map((payment) => <div key={payment.id} className="flex justify-between gap-3 border-t border-line pt-3 text-sm"><div>{formatDateID(dateOnlyToISO(payment.businessDate))} · {payment.method}<p className="text-xs text-muted">{payment.notes}</p></div><strong>{formatRupiah(payment.amount)}</strong></div>)}
+      {purchase.payable.payments.map((payment) => {
+        const isReversal = payment.reversesPaymentId !== null;
+        const reversed = payment.reversal !== null;
+        const businessDate = dateOnlyToISO(payment.businessDate);
+        return <div key={payment.id} className="flex justify-between gap-3 border-t border-line pt-3 text-sm">
+          <div>{formatDateID(businessDate)} · {payment.method}{isReversal ? " · koreksi" : reversed ? " · dibalik" : ""}
+            {payment.notes && <p className="text-xs text-muted">{payment.notes}</p>}
+            {!isReversal && !reversed && <ReversePayablePaymentDialog paymentId={payment.id} amount={payment.amount} method={payment.method} businessDate={businessDate} />}
+          </div>
+          <strong className={isReversal ? "text-danger" : reversed ? "text-faint line-through" : undefined}>
+            {isReversal ? `−${formatRupiah(-payment.amount)}` : formatRupiah(payment.amount)}
+          </strong>
+        </div>;
+      })}
     </section>
     <div className="text-xs text-muted">Dicatat oleh {purchase.createdBy.name}{purchase.notes && <p className="mt-2 whitespace-pre-wrap">{purchase.notes}</p>}</div>
   </div>;

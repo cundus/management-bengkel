@@ -208,7 +208,8 @@ export async function getCashSection(range: ReportRange): Promise<CashSection> {
     byDate.set(key, (byDate.get(key) ?? 0) + payment.amount);
     const method = methodMap.get(payment.method) ?? { amount: 0, count: 0 };
     method.amount += payment.amount;
-    method.count += 1;
+    // Entri koreksi bernominal negatif dan mengurangi jumlah pembayaran.
+    method.count += payment.amount < 0 ? -1 : 1;
     methodMap.set(payment.method, method);
   }
   for (const [key, amount] of refunds.byDate) {
@@ -221,6 +222,7 @@ export async function getCashSection(range: ReportRange): Promise<CashSection> {
     refunds: refunds.total,
     paymentMethods: [...methodMap.entries()]
       .map(([method, value]) => ({ method, ...value }))
+      .filter((item) => item.count !== 0 || item.amount !== 0)
       .sort((a, b) => b.amount - a.amount),
     byDate,
   };

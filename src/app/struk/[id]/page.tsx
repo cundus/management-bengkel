@@ -49,7 +49,13 @@ export default async function ReceiptPage({
   const width: 58 | 80 = w === "80" ? 80 : 58;
   const workshopName = settings.workshop_name || "WMC 225";
   const voided = transaction.status === "batal";
-  const methods = [...new Set(transaction.payments.map((payment) => payment.method))];
+  const methods = [
+    ...new Set(
+      transaction.payments
+        .filter((payment) => payment.reversesPaymentId === null && !payment.reversed)
+        .map((payment) => payment.method),
+    ),
+  ];
   const base = `/struk/${transaction.id}`;
 
   return (
