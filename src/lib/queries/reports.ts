@@ -1,5 +1,5 @@
 import { prisma } from "../db";
-import { dateOnlyToISO, endOfMonthISO, monthRange, parseDateOnly, todayISO } from "../dates";
+import { addDaysISO, dateOnlyToISO, daysBetween, endOfMonthISO, monthRange, parseDateOnly, todayISO } from "../dates";
 import { openTransactionRecords } from "./mappers";
 import { listTransactionInclude } from "./mappers";
 import type { ReportData } from "../types";
@@ -15,7 +15,24 @@ function previousMonth(month: string): string {
 
 export async function getMonthlyReport(month: string): Promise<ReportData> {
   const { start, end } = monthRange(month);
-  const { start: prevStart, end: prevEnd } = monthRange(previousMonth(month));
+  const previous = monthRange(previousMonth(month));
+  return getReport(start, end, previous);
+}
+
+/**
+ * Laporan keuangan untuk rentang tanggal bisnis [start, end] (inklusif) dengan
+ * rincian per hari. Tanpa `previous`, pembanding adalah rentang sepanjang sama
+ * tepat sebelum `start`.
+ */
+export async function getReport(
+  start: string,
+  end: string,
+  previous?: { start: string; end: string },
+): Promise<ReportData> {
+  const month = start.slice(0, 7);
+  const length = daysBetween(start, end) + 1;
+  const prevStart = previous?.start ?? addDaysISO(start, -length);
+  const prevEnd = previous?.end ?? addDaysISO(start, -1);
   const startDate = parseDateOnly(start);
   const endDate = parseDateOnly(end);
 
@@ -102,9 +119,8 @@ export async function getMonthlyReport(month: string): Promise<ReportData> {
     dailyCashMap.set(key, (dailyCashMap.get(key) ?? 0) - amount);
   }
 
-  const dayCount = Number(end.slice(8, 10));
-  const daily: ReportData["daily"] = Array.from({ length: dayCount }, (_, index) => {
-    const date = `${month}-${String(index + 1).padStart(2, "0")}`;
+  const daily: ReportData["daily"] = Array.from({ length }, (_, index) => {
+    const date = addDaysISO(start, index);
     const entry = dailyRevenue.get(date);
     return {
       date,
@@ -175,6 +191,8 @@ export async function getMonthlyReport(month: string): Promise<ReportData> {
     month,
     start,
     end,
+    previousStart: prevStart,
+    previousEnd: prevEnd,
     revenue,
     previousRevenue: previousRevenueAggregate._sum.total ?? 0,
     transactions: transactions.length,

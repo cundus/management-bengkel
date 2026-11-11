@@ -16,12 +16,12 @@ import {
   Wrench,
 } from "lucide-react";
 import { requireUser } from "@/lib/auth";
-import { getMonthlyReport, monthOptions } from "@/lib/queries/reports";
+import { getMonthlyReport, getReport, monthOptions } from "@/lib/queries/reports";
 import { PageHeader } from "@/components/ui/page-header";
 import { DailyRevenueChart } from "@/components/reports/daily-chart";
 import { growth } from "@/lib/calculations";
-import { currentMonthISO, isValidMonth, monthLabel } from "@/lib/dates";
-import { formatCompactRupiah, formatRupiah, percent } from "@/lib/format";
+import { addDaysISO, MAX_REPORT_RANGE_DAYS, monthLabel, rangeLabel, resolveReportPeriod, todayISO } from "@/lib/dates";
+import { formatRupiah, percent } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 export const metadata: Metadata = { title: "Laporan" };
@@ -46,13 +46,28 @@ const MARGIN_GROUPS = [
 export default async function ReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; from?: string; to?: string }>;
 }) {
   await requireUser();
   const params = await searchParams;
-  const month = isValidMonth(params.month) ? params.month : currentMonthISO();
-  const report = await getMonthlyReport(month);
+  const period = resolveReportPeriod(params);
+  const isDaily = period.mode === "harian";
+  const month = period.month;
+  const report = isDaily ? await getReport(period.start, period.end) : await getMonthlyReport(month);
   const options = monthOptions(12);
+  const today = todayISO();
+  const periodQuery = isDaily ? `from=${period.start}&to=${period.end}` : `month=${month}`;
+  const periodLabel = isDaily ? rangeLabel(period.start, period.end) : monthLabel(month);
+  const previousLabel = isDaily ? "vs periode sebelumnya" : "vs bulan lalu";
+  const thisPeriod = isDaily ? (period.start === period.end ? "pada hari ini" : "pada periode ini") : "bulan ini";
+  const quickRanges = [
+    { label: "Hari ini", from: today, to: today },
+    { label: "Kemarin", from: addDaysISO(today, -1), to: addDaysISO(today, -1) },
+    { label: "7 hari", from: addDaysISO(today, -6), to: today },
+    { label: "30 hari", from: addDaysISO(today, -29), to: today },
+  ];
+  const dateInputClass =
+    "h-10 rounded-xl border border-line-strong bg-surface px-2.5 text-[11.5px] font-extrabold text-ink outline-none focus:border-brand";
   const revenueGrowth = growth(report.revenue, report.previousRevenue);
   const margin = percent(report.netProfit, report.revenue);
   const totalExpense = report.expenseByCategory.reduce((sum, item) => sum + item.amount, 0);
@@ -63,13 +78,39 @@ export default async function ReportPage({
       <PageHeader
         eyebrow="Buku besar bengkel"
         title="Laporan keuangan"
-        description="Pendapatan, biaya, laba, dan arus kas bulanan dalam satu tampilan yang siap diambil keputusan."
+        description="Pendapatan, biaya, laba, dan arus kas bulanan atau per interval harian dalam satu tampilan yang siap diambil keputusan."
         actions={
           <>
-            <a href={`/api/export/laporan?month=${month}`} className="btn-secondary">
+            <a href={`/api/export/laporan?${periodQuery}`} className="btn-secondary">
               <Download size={15} />
               <span className="hidden sm:inline">Ekspor laporan</span>
             </a>
+            <nav className="flex rounded-xl border border-line-strong bg-surface p-0.5 text-[11px] font-extrabold" aria-label="Jenis laporan">
+              <Link
+                href={`/laporan?month=${month}`}
+                aria-current={!isDaily ? "page" : undefined}
+                className={cn("rounded-[10px] px-3 py-2", !isDaily ? "bg-pine text-white" : "text-muted hover:text-ink")}
+              >
+                Bulanan
+              </Link>
+              <Link
+                href={`/laporan?from=${today}&to=${today}`}
+                aria-current={isDaily ? "page" : undefined}
+                className={cn("rounded-[10px] px-3 py-2", isDaily ? "bg-pine text-white" : "text-muted hover:text-ink")}
+              >
+                Harian
+              </Link>
+            </nav>
+            {isDaily ? (
+              <form method="get" action="/laporan" className="flex flex-wrap items-center gap-1.5">
+                <input type="date" name="from" defaultValue={period.start} className={dateInputClass} aria-label="Dari tanggal" />
+                <span className="text-[10px] font-bold text-faint">s/d</span>
+                <input type="date" name="to" defaultValue={period.end} className={dateInputClass} aria-label="Sampai tanggal" />
+                <button type="submit" className="btn-primary h-10 px-3 text-[11px]">
+                  Lihat
+                </button>
+              </form>
+            ) : (
             <form method="get" action="/laporan" className="flex items-center gap-1.5">
               <div className="relative">
                 <CalendarDays size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
@@ -90,17 +131,41 @@ export default async function ReportPage({
                 Lihat
               </button>
             </form>
+            )}
           </>
         }
       />
 
+      {isDaily && (
+        <nav className="mb-3 flex flex-wrap items-center gap-1.5" aria-label="Rentang cepat">
+          {quickRanges.map((range) => {
+            const active = range.from === period.start && range.to === period.end;
+            return (
+              <Link
+                key={range.label}
+                href={`/laporan?from=${range.from}&to=${range.to}`}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "rounded-full border px-3 py-1.5 text-[10px] font-extrabold",
+                  active ? "border-pine bg-pine text-white" : "border-line-strong bg-surface text-muted hover:text-ink",
+                )}
+              >
+                {range.label}
+              </Link>
+            );
+          })}
+          <span className="text-[9.5px] font-medium text-faint">Maksimal {MAX_REPORT_RANGE_DAYS} hari per laporan.</span>
+        </nav>
+      )}
+
       <section className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="badge-neutral">
-            <CalendarDays size={11} /> {monthLabel(month)}
+            <CalendarDays size={11} /> {periodLabel}
           </span>
           <span className="text-[10px] font-medium text-faint">
             {report.transactions} transaksi · {report.daily.filter((d) => d.revenue > 0).length} hari operasional
+            {isDaily && report.daily.length > 1 ? ` dari ${report.daily.length} hari` : ""}
           </span>
         </div>
         <div className="text-[10px] font-semibold text-faint">Semua angka dalam Rupiah</div>
@@ -125,7 +190,7 @@ export default async function ReportPage({
           <div className="mt-1 font-display text-[1.2rem] font-extrabold tracking-tight tabular sm:text-[1.45rem]">
             {formatRupiah(report.revenue)}
           </div>
-          <div className="mt-1 text-[9px] font-medium text-white/35">vs bulan lalu</div>
+          <div className="mt-1 text-[9px] font-medium text-white/35">{previousLabel}</div>
         </div>
 
         <div className="card p-4 sm:p-5">
@@ -227,7 +292,9 @@ export default async function ReportPage({
             </div>
           </div>
           <div className="mt-4 flex items-center justify-between rounded-xl border border-line bg-[#fbf9f4] px-3.5 py-2.5">
-            <span className="text-[10px] font-semibold text-muted">Biaya bulan lalu</span>
+            <span className="text-[10px] font-semibold text-muted">
+              {isDaily ? `Biaya periode sebelumnya (${rangeLabel(report.previousStart, report.previousEnd)})` : "Biaya bulan lalu"}
+            </span>
             <span className="text-[10px] font-extrabold text-ink tabular">{formatRupiah(report.previousExpenses)}</span>
           </div>
         </div>
@@ -291,7 +358,7 @@ export default async function ReportPage({
             </div>
             {report.paymentMethods.length === 0 ? (
               <p className="mt-5 rounded-xl border border-dashed border-line px-4 py-6 text-center text-[10px] text-faint">
-                Belum ada pembayaran bulan ini.
+                Belum ada pembayaran {thisPeriod}.
               </p>
             ) : (
               <>
@@ -355,7 +422,7 @@ export default async function ReportPage({
               </div>
               {items.length === 0 ? (
                 <p className="mt-4 rounded-xl border border-dashed border-line px-4 py-6 text-center text-[10px] text-faint">
-                  Belum ada penjualan {group.label.toLowerCase()} bulan ini.
+                  Belum ada penjualan {group.label.toLowerCase()} {thisPeriod}.
                 </p>
               ) : (
                 <div className="table-wrap mt-3">
@@ -446,7 +513,7 @@ export default async function ReportPage({
           </div>
           {report.topItems.length === 0 ? (
             <p className="mt-5 rounded-xl border border-dashed border-line px-4 py-6 text-center text-[10px] text-faint">
-              Belum ada penjualan bulan ini.
+              Belum ada penjualan {thisPeriod}.
             </p>
           ) : (
             <div className="mt-3 divide-y divide-line/70">
@@ -513,7 +580,7 @@ export default async function ReportPage({
       <div className="mt-4 flex items-start gap-2 rounded-xl border border-line bg-surface/60 px-4 py-3">
         <CircleDollarSign size={14} className="mt-0.5 shrink-0 text-success" />
         <p className="text-[10px] leading-relaxed text-muted">
-          <span className="font-bold text-ink">Cara membaca:</span> Omset adalah nilai nota bulan ini; HPP dihitung dari
+          <span className="font-bold text-ink">Cara membaca:</span> Omset adalah nilai nota pada periode terpilih; HPP dihitung dari
           modal item yang terjual. Margin jasa dan barang dihitung terpisah; diskon nota dibagi proporsional ke tiap
           item. Laba bersih = omset − HPP − biaya operasional. Kas diterima bisa berbeda dari omset
           karena pembayaran DP, pelunasan piutang lama, atau transaksi belum dibayar. Ini bukan pengganti laporan pajak.

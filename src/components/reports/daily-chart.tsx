@@ -14,9 +14,11 @@ export function DailyRevenueChart({
   const total = daily.reduce((sum, day) => sum + day.revenue, 0);
   const activeDays = daily.filter((day) => day.revenue > 0).length;
   const bestDay = [...daily].sort((a, b) => b.revenue - a.revenue)[0];
-  const monthLabelShort = new Intl.DateTimeFormat("id-ID", { month: "short", timeZone: "UTC" }).format(
-    new Date(`${start}T12:00:00Z`),
-  );
+  const shortDate = (iso: string) =>
+    new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "short", timeZone: "UTC" }).format(
+      new Date(`${iso}T12:00:00Z`),
+    );
+  const middle = daily[Math.floor((daily.length - 1) / 2)]?.date ?? start;
 
   return (
     <div>
@@ -34,7 +36,7 @@ export function DailyRevenueChart({
           <div className="rounded-lg bg-[#f8f5ef] px-2.5 py-1.5 text-right">
             <div className="text-[8px] font-extrabold uppercase tracking-wider text-faint">Hari terbaik</div>
             <div className="mt-0.5 text-[10px] font-extrabold text-ink">
-              {bestDay?.revenue ? `${formatCompactRupiah(bestDay.revenue)} · ${bestDay.date.slice(8)} ${monthLabelShort}` : "—"}
+              {bestDay?.revenue ? `${formatCompactRupiah(bestDay.revenue)} · ${shortDate(bestDay.date)}` : "—"}
             </div>
           </div>
         </div>
@@ -61,9 +63,9 @@ export function DailyRevenueChart({
         })}
       </div>
       <div className="mt-2 flex justify-between border-t border-line pt-2">
-        <span className="text-[9px] font-bold text-faint">01</span>
-        <span className="text-[9px] font-bold text-faint">{monthLabelShort}</span>
-        <span className="text-[9px] font-bold text-faint">{end.slice(8, 10)}</span>
+        <span className="text-[9px] font-bold text-faint">{shortDate(start)}</span>
+        {daily.length > 2 && <span className="text-[9px] font-bold text-faint">{shortDate(middle)}</span>}
+        {end !== start && <span className="text-[9px] font-bold text-faint">{shortDate(end)}</span>}
       </div>
     </div>
   );

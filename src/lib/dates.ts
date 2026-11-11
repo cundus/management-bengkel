@@ -137,3 +137,38 @@ export function monthRange(month: string): { start: string; end: string } {
 export function lastNDates(n: number, today = todayISO()): string[] {
   return Array.from({ length: n }, (_, index) => addDaysISO(today, index - (n - 1)));
 }
+
+export const MAX_REPORT_RANGE_DAYS = 366;
+
+export type ReportPeriod =
+  | { mode: "bulanan"; month: string; start: string; end: string }
+  | { mode: "harian"; month: string; start: string; end: string };
+
+/**
+ * Tentukan periode laporan dari query string. `from`/`to` (YYYY-MM-DD) yang valid
+ * menghasilkan laporan interval harian; selain itu jatuh ke laporan bulanan.
+ * Urutan tanggal yang terbalik ditukar dan rentang dibatasi MAX_REPORT_RANGE_DAYS.
+ */
+export function resolveReportPeriod(params: {
+  month?: string | null;
+  from?: string | null;
+  to?: string | null;
+}): ReportPeriod {
+  const from = params.from && isValidISODate(params.from) ? params.from : null;
+  const to = params.to && isValidISODate(params.to) ? params.to : null;
+  if (from || to) {
+    let start = from ?? to!;
+    let end = to ?? from!;
+    if (start > end) [start, end] = [end, start];
+    if (daysBetween(start, end) >= MAX_REPORT_RANGE_DAYS) {
+      start = addDaysISO(end, -(MAX_REPORT_RANGE_DAYS - 1));
+    }
+    return { mode: "harian", month: start.slice(0, 7), start, end };
+  }
+  const month = isValidMonth(params.month) ? params.month : currentMonthISO();
+  return { mode: "bulanan", month, ...monthRange(month) };
+}
+
+export function rangeLabel(start: string, end: string): string {
+  return start === end ? formatDateID(start) : `${formatDateID(start)} – ${formatDateID(end)}`;
+}

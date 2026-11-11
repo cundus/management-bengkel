@@ -239,6 +239,8 @@ export type ReportData = {
   month: string;
   start: string;
   end: string;
+  previousStart: string;
+  previousEnd: string;
   revenue: number;
   previousRevenue: number;
   transactions: number;

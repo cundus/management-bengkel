@@ -7,6 +7,7 @@ import {
   isValidISODate,
   monthLabel,
   monthRange,
+  resolveReportPeriod,
   startOfMonthISO,
   todayISO,
 } from "@/lib/dates";
@@ -46,5 +47,32 @@ describe("tanggal", () => {
     expect(monthLabel("2026-11")).toContain("November");
     expect(monthLabel("2026-11")).toContain("2026");
     expect(todayISO(new Date("2026-11-09T17:30:00Z"))).toBe("2026-11-10");
+  });
+
+  it("menentukan periode laporan bulanan atau interval harian", () => {
+    expect(resolveReportPeriod({ month: "2026-02" })).toEqual({
+      mode: "bulanan",
+      month: "2026-02",
+      start: "2026-02-01",
+      end: "2026-02-28",
+    });
+    expect(resolveReportPeriod({ from: "2026-11-01", to: "2026-11-07" })).toMatchObject({
+      mode: "harian",
+      start: "2026-11-01",
+      end: "2026-11-07",
+    });
+    // Tanggal terbalik ditukar; satu tanggal saja berarti satu hari.
+    expect(resolveReportPeriod({ from: "2026-11-07", to: "2026-11-01" })).toMatchObject({
+      start: "2026-11-01",
+      end: "2026-11-07",
+    });
+    expect(resolveReportPeriod({ from: "2026-11-05" })).toMatchObject({ start: "2026-11-05", end: "2026-11-05" });
+    // Tanggal tidak valid jatuh ke mode bulanan.
+    expect(resolveReportPeriod({ from: "2026-02-30", month: "2026-03" }).mode).toBe("bulanan");
+    // Rentang dibatasi 366 hari dihitung mundur dari tanggal akhir.
+    expect(resolveReportPeriod({ from: "2020-01-01", to: "2026-11-12" })).toMatchObject({
+      start: addDaysISO("2026-11-12", -365),
+      end: "2026-11-12",
+    });
   });
 });

@@ -1,7 +1,7 @@
 import { getCurrentUser } from "@/lib/auth";
-import { getMonthlyReport } from "@/lib/queries/reports";
+import { getMonthlyReport, getReport } from "@/lib/queries/reports";
 import { csvResponse, toCsv } from "@/lib/csv";
-import { currentMonthISO, isValidMonth, monthLabel } from "@/lib/dates";
+import { monthLabel, rangeLabel, resolveReportPeriod } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -10,12 +10,21 @@ export async function GET(request: Request) {
   if (!user) return new Response("Unauthorized", { status: 401 });
 
   const url = new URL(request.url);
-  const requested = url.searchParams.get("month");
-  const month = isValidMonth(requested) ? requested : currentMonthISO();
-  const report = await getMonthlyReport(month);
+  const period = resolveReportPeriod({
+    month: url.searchParams.get("month"),
+    from: url.searchParams.get("from"),
+    to: url.searchParams.get("to"),
+  });
+  const isDaily = period.mode === "harian";
+  const report = isDaily ? await getReport(period.start, period.end) : await getMonthlyReport(period.month);
+  const filename = isDaily
+    ? `wmc225-laporan-${period.start}${period.end !== period.start ? `_${period.end}` : ""}.csv`
+    : `wmc225-laporan-${period.month}.csv`;
 
   const rows: (string | number)[][] = [
-    ["Laporan Bulanan WMC 225", monthLabel(month)],
+    isDaily
+      ? ["Laporan Harian WMC 225", rangeLabel(period.start, period.end)]
+      : ["Laporan Bulanan WMC 225", monthLabel(period.month)],
     ["Periode", `${report.start} s/d ${report.end}`],
     [],
     ["RINGKASAN", "NILAI (Rp)"],
@@ -79,5 +88,5 @@ export async function GET(request: Request) {
     ...report.topItems.map((item) => [item.name, item.category, item.qty, item.revenue]),
   ];
 
-  return csvResponse(`wmc225-laporan-${month}.csv`, toCsv(rows));
+  return csvResponse(filename, toCsv(rows));
 }
