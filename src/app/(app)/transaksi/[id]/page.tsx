@@ -24,7 +24,7 @@ import { dueLabel, formatDateID, formatDateTimeID, todayISO } from "@/lib/dates"
 import { parseVoidMaxDays, voidWindowCheck } from "@/lib/calculations";
 import { formatPhoneForWhatsApp, formatRupiah } from "@/lib/format";
 import { PaymentBadge, DueBadge } from "@/components/ui/status-badge";
-import { PrintButton } from "@/components/transactions/print-button";
+import { PrintButton, ReceiptButton } from "@/components/transactions/print-button";
 import { PaymentForm } from "@/components/transactions/payment-form";
 import {
   RejectVoidRequestButton,
@@ -93,6 +93,7 @@ export default async function TransactionDetailPage({
             <Download size={15} />
             <span className="hidden sm:inline">Unduh</span>
           </a>
+          <ReceiptButton transactionId={transaction.id} />
           <PrintButton />
           {canVoid && (
             <VoidTransactionButton
@@ -162,14 +163,17 @@ export default async function TransactionDetailPage({
       )}
 
       {created === "1" && (
-        <div className="no-print mb-4 flex items-start gap-2.5 rounded-2xl border border-success/20 bg-success-soft px-4 py-3">
-          <CheckCircle2 size={17} className="mt-0.5 shrink-0 text-success" />
-          <div>
-            <p className="text-[12px] font-extrabold text-success">Transaksi berhasil disimpan</p>
-            <p className="mt-0.5 text-[10.5px] font-medium text-success/75">
-              Stok sudah diperbarui. Nota siap dicetak atau dibagikan ke pelanggan.
-            </p>
+        <div className="no-print mb-4 flex flex-col gap-3 rounded-2xl border border-success/20 bg-success-soft px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2.5">
+            <CheckCircle2 size={17} className="mt-0.5 shrink-0 text-success" />
+            <div>
+              <p className="text-[12px] font-extrabold text-success">Transaksi berhasil disimpan</p>
+              <p className="mt-0.5 text-[10.5px] font-medium text-success/75">
+                Stok sudah diperbarui. Nota siap dicetak atau dibagikan ke pelanggan.
+              </p>
+            </div>
           </div>
+          <ReceiptButton transactionId={transaction.id} variant="primary" />
         </div>
       )}
 
