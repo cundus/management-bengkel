@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
-import { createPurchaseAction } from "@/actions/purchases";
+import { Plus, Trash2, TriangleAlert } from "lucide-react";
+import { createPurchaseAction, type PurchaseWarning } from "@/actions/purchases";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/constants";
 import { formatRupiah } from "@/lib/format";
 import type { Supplier } from "@/lib/types";
@@ -21,10 +21,21 @@ export function PurchaseForm({ suppliers, items, today, requestId }: {
   const [payment, setPayment] = useState("tempo");
   const [partial, setPartial] = useState("");
   const [message, setMessage] = useState("");
+  const [requestIdValue, setRequestIdValue] = useState(requestId);
+  const [duplicateWarning, setDuplicateWarning] = useState<PurchaseWarning | null>(null);
+  const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
   const [pending, startTransition] = useTransition();
   const total = lines.reduce((sum, line) => sum + Number(line.quantity) * Number(line.unitCost), 0);
   const payNow = payment === "lunas" ? total : payment === "sebagian" ? Number(partial) : 0;
-  const update = (key: number, patch: Partial<Line>) => setLines((current) => current.map((line) => line.key === key ? { ...line, ...patch } : line));
+  const resetDuplicate = () => {
+    setDuplicateWarning(null);
+    setDuplicateConfirmed(false);
+    setMessage("");
+  };
+  const update = (key: number, patch: Partial<Line>) => {
+    resetDuplicate();
+    setLines((current) => current.map((line) => line.key === key ? { ...line, ...patch } : line));
+  };
 
   if (!suppliers.length || !items.length) return (
     <div className="card space-y-3 p-5 text-sm text-muted">
@@ -41,17 +52,54 @@ export function PurchaseForm({ suppliers, items, today, requestId }: {
       startTransition(async () => {
         try {
           const result = await createPurchaseAction({
-            requestId, supplierId: Number(form.get("supplierId")), referenceNo: String(form.get("referenceNo") ?? ""),
+            requestId: requestIdValue, supplierId: Number(form.get("supplierId")), referenceNo: String(form.get("referenceNo") ?? ""),
             businessDate: String(form.get("businessDate")), dueDate: payNow < total ? String(form.get("dueDate")) : null,
             notes: String(form.get("notes") ?? ""), payNow, method: String(form.get("method")) as PaymentMethod,
+            confirmDuplicate: duplicateConfirmed,
             lines: lines.map((line) => ({ itemId: Number(line.itemId), code: line.code, quantity: Number(line.quantity), unitCost: Number(line.unitCost) })),
           });
-          if (result.ok) { router.push(`/pembelian/${result.id}`); router.refresh(); }
-          else setMessage(result.message);
-        } catch { setMessage("Koneksi terganggu. Coba simpan kembali; pembelian yang sama tidak akan digandakan."); }
+          if (result.ok) {
+            setRequestIdValue(crypto.randomUUID());
+            router.push(`/pembelian/${result.id}?baru=1`);
+            router.refresh();
+          } else if (result.warning) {
+            setDuplicateWarning(result.warning);
+            setDuplicateConfirmed(false);
+            setMessage(result.message);
+          } else {
+            resetDuplicate();
+            setMessage(result.message);
+          }
+        } catch {
+          resetDuplicate();
+          setMessage("Koneksi terganggu. Coba simpan kembali; pembelian yang sama tidak akan digandakan.");
+        }
       });
     }} className="space-y-5">
-      {message && <p role="alert" className="rounded-xl bg-danger-soft p-4 text-sm text-danger">{message}</p>}
+      {duplicateWarning ? (
+        <div className="space-y-2.5 rounded-xl border border-warning/30 bg-warning-soft p-4 text-sm">
+          <p role="alert" className="flex items-start gap-2 text-[11px] font-semibold leading-relaxed text-warning">
+            <TriangleAlert size={15} className="mt-0.5 shrink-0" /> {message}
+          </p>
+          <Link
+            href="/pengeluaran"
+            className="inline-flex text-[10px] font-extrabold text-pine underline"
+          >
+            Koreksi pengeluaran #{duplicateWarning.expenseId} di menu Pengeluaran
+          </Link>
+          <label className="flex items-start gap-2 text-[10px] font-semibold text-warning">
+            <input
+              type="checkbox"
+              checked={duplicateConfirmed}
+              onChange={(event) => setDuplicateConfirmed(event.target.checked)}
+              className="mt-0.5"
+            />
+            Saya sudah koreksi pengeluaran tersebut, atau ini transaksi berbeda.
+          </label>
+        </div>
+      ) : (
+        message && <p role="alert" className="rounded-xl bg-danger-soft p-4 text-sm text-danger">{message}</p>
+      )}
       <fieldset disabled={pending} className="space-y-5">
         <section className="card grid gap-4 p-5 sm:grid-cols-2">
           <div><label htmlFor="purchase-supplier" className="label">Supplier</label>
@@ -61,7 +109,7 @@ export function PurchaseForm({ suppliers, items, today, requestId }: {
           <div><label htmlFor="purchase-reference" className="label">Nomor nota supplier (opsional)</label>
             <input id="purchase-reference" name="referenceNo" maxLength={80} className="input" placeholder="Nomor faktur / nota pembelian" /></div>
           <div><label htmlFor="purchase-date" className="label">Tanggal barang diterima</label>
-            <input id="purchase-date" name="businessDate" type="date" required defaultValue={today} max={today} className="input" /></div>
+            <input id="purchase-date" name="businessDate" type="date" required defaultValue={today} max={today} className="input" onChange={resetDuplicate} /></div>
           <div><label htmlFor="purchase-notes" className="label">Catatan (opsional)</label>
             <input id="purchase-notes" name="notes" maxLength={500} className="input" /></div>
         </section>
@@ -107,11 +155,28 @@ export function PurchaseForm({ suppliers, items, today, requestId }: {
           </div>
           <div className="rounded-xl bg-[#f8f5ef] p-4 text-sm">
             <div className="flex justify-between"><span>Total pembelian</span><strong>{formatRupiah(total)}</strong></div>
-            <div className="mt-2 flex justify-between"><span>Dibayar sekarang</span><strong>{formatRupiah(payNow)}</strong></div>
-            <div className="mt-2 flex justify-between"><span>Sisa hutang supplier</span><strong>{formatRupiah(Math.max(0, total - payNow))}</strong></div>
+            <div className="mt-2 flex justify-between"><span>Kas keluar saat simpan</span><strong>{formatRupiah(payNow)}</strong></div>
+            <div className="mt-2 flex justify-between"><span>Hutang supplier bertambah</span><strong>{formatRupiah(Math.max(0, total - payNow))}</strong></div>
           </div>
-          <p className="text-xs leading-relaxed text-muted">Simpan saat barang sudah diterima. Stok bertambah per batch dan sisa tagihan masuk ke Hutang Supplier. Pembayaran berikutnya dicatat dari tagihan yang sama.</p>
-          <button type="submit" disabled={pending || total <= 0} className="btn-primary">{pending ? "Menyimpan pembelian…" : "Simpan & terima barang"}</button>
+          <p className="text-xs leading-relaxed text-muted">
+            Pembelian lunas atau tunai <strong>otomatis tercatat sebagai kas keluar</strong> di Laporan Arus Kas. Jangan
+            catat lagi di menu Pengeluaran. Untuk tempo, kas baru keluar saat pembayaran supplier dicatat.
+          </p>
+          <button
+            type="submit"
+            disabled={pending || total <= 0 || (duplicateWarning !== null && !duplicateConfirmed)}
+            className="btn-primary"
+          >
+            {pending
+              ? "Menyimpan pembelian…"
+              : duplicateWarning && !duplicateConfirmed
+                ? "Centang konfirmasi dulu"
+                : duplicateWarning
+                  ? "Simpan meski bukan duplikat"
+                  : payment === "tempo"
+                    ? "Simpan & catat hutang"
+                    : "Simpan, terima barang & catat kas"}
+          </button>
         </section>
       </fieldset>
     </form>

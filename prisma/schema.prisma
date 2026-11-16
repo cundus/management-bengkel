@@ -341,6 +341,11 @@ model Expense {
   createdById Int      @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
   createdBy   User     @relation("ExpenseCreator", fields: [createdById], references: [id])
+  /// Entri koreksi bernominal negatif yang membalik pengeluaran lain. Pengeluaran
+  /// tidak pernah diubah/dihapus; salah input dikoreksi dengan entri pembalik.
+  reversesExpenseId Int?     @unique @map("reverses_expense_id")
+  reverses          Expense? @relation("ExpenseReversal", fields: [reversesExpenseId], references: [id], onDelete: NoAction)
+  reversal          Expense? @relation("ExpenseReversal")
 
   @@index([expenseDate])
   @@map("expenses")

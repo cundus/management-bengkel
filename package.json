@@ -2,15 +2,15 @@
   "name": "wmc225-workshop",
   "version": "1.1.0",
   "private": true,
-  "description": "WMC 225 — manajemen bengkel mobile-first dengan Prisma dan PostgreSQL.",
+  "description": "WMC 225 \u2014 manajemen bengkel mobile-first dengan Prisma dan PostgreSQL.",
   "packageManager": "pnpm@9.15.9",
   "engines": {
     "node": "22.x"
   },
   "scripts": {
-    "dev": "next dev",
-    "build": "prisma generate && next build",
-    "start": "next start",
+    "dev": "node init && next dev",
+    "build": "node init && prisma generate && next build",
+    "start": "node init && next start",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

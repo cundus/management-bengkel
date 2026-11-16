@@ -35,7 +35,7 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
     expenses: expense.expenses,
     daily: buildDaily(ctx.range, revenue, cash),
   };
-  const supplierPayments = Math.max(0, report.cashOut - report.expenses - report.refunds);
+  const supplierPayments = report.payableCashOut;
   const activeDays = report.daily.filter((day) => day.revenue > 0 || day.cash > 0);
 
   return (
@@ -78,7 +78,7 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
               <span className="font-bold text-ink tabular">{formatRupiah(report.expenses)}</span>
             </div>
             <div className="flex justify-between text-muted">
-              <span>Pembayaran hutang supplier</span>
+              <span>Pembelian &amp; pembayaran supplier{supplierPayments < 0 ? " (koreksi)" : ""}</span>
               <span className="font-bold text-ink tabular">{formatRupiah(supplierPayments)}</span>
             </div>
             {report.refunds > 0 && (
@@ -178,7 +178,8 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
         <CircleDollarSign size={14} className="mt-0.5 shrink-0 text-success" />
         <p className="text-[10px] leading-relaxed text-muted">
           <span className="font-bold text-ink">Cara membaca:</span> Kas diterima mencakup DP dan pelunasan piutang dari nota periode
-          sebelumnya. Kas keluar = pengeluaran operasional + pembayaran hutang supplier + refund nota batal.
+          sebelumnya. Kas keluar = pengeluaran operasional + pembelian/pembayaran supplier (termasuk pembelian tunai) +
+          refund nota batal.
         </p>
       </div>
     </div>

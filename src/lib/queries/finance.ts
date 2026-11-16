@@ -18,7 +18,7 @@ export async function listExpenses(options?: { month?: string; limit?: number })
 
   const rows = await prisma.expense.findMany({
     where: dateFilter ? { expenseDate: dateFilter } : {},
-    include: { createdBy: true },
+    include: { createdBy: true, reversal: { select: { id: true } } },
     orderBy: [{ expenseDate: "desc" }, { id: "desc" }],
     take: options?.limit ?? 100,
   });
@@ -41,6 +41,8 @@ export async function listExpenses(options?: { month?: string; limit?: number })
       amount: expense.amount,
       createdByName: expense.createdBy.name,
       createdAt: dateTimeToISO(expense.createdAt),
+      reversesExpenseId: expense.reversesExpenseId,
+      reversed: expense.reversal !== null,
     })),
     total: allForPeriod.reduce((sum, expense) => sum + expense.amount, 0),
     byCategory: [...categoryMap.entries()]

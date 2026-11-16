@@ -38,7 +38,20 @@ Periksa ringkasan, lalu **Simpan & buka nota**. Nota mendapat nomor otomatis.
 ## Alur pemilik
 
 ### Pengeluaran
-Menu **Pengeluaran** → **Catat pengeluaran**. Pilih kategori (Gaji, Sewa, Listrik & Air, Pembelian Stok, dll.), isi nominal dan keterangan. Pengeluaran mengurangi laba bersih di laporan.
+Menu **Pengeluaran** → **Catat pengeluaran**. Pilih kategori (Gaji, Sewa, Listrik & Air, Perlengkapan, dll.), isi nominal dan keterangan. Pengeluaran mengurangi laba bersih di laporan.
+
+**Pembelian sparepart/stok tidak dicatat di sini.** Gunakan menu **Pembelian** agar kas keluar, stok, dan hutang supplier tercatat sekaligus. Jika nominal dan tanggal pengeluaran menyerupai pembelian yang sudah ada—atau sebaliknya—aplikasi akan meminta konfirmasi agar tidak terjadi pencatatan ganda.
+
+Salah input pengeluaran? Klik **Koreksi** pada baris pengeluaran. Pengeluaran asli tetap tersimpan; aplikasi membuat entri koreksi bernominal negatif pada hari ini, sehingga total dan laba kembali tanpa menghapus riwayat.
+
+### Pembelian stok
+Menu **Pembelian** → **Pembelian baru**. Pilih supplier, tanggal barang diterima, nomor nota (opsional), lalu isi barang, kode batch, jumlah, dan modal per unit. Pilih pembayaran **Tempo**, **Sebagian**, atau **Lunas**.
+
+- **Tempo:** belum ada kas keluar; tagihan masuk ke Hutang Supplier dan jatuh tempo wajib diisi.
+- **Sebagian:** DP dicatat sebagai kas keluar, sisanya menjadi hutang.
+- **Lunas:** seluruh nilai dicatat sebagai kas keluar pada tanggal pembelian.
+
+Setelah disimpan, halaman pembelian menampilkan **Kas keluar**, **Persediaan bertambah**, dan **Sisa hutang**. Pembelian stok bukan pengeluaran operasional: barang menjadi persediaan, dan biaya (HPP) baru muncul saat barang terjual.
 
 ### Hutang supplier
 1. Tambahkan **Supplier baru** sekali saja.
@@ -79,6 +92,7 @@ Menu **Laporan**:
 | Pelanggan & kendaraan | ✅ | ✅ |
 | Laporan | ✅ | ✅ |
 | Stok (lihat & edit) | ✅ | lihat saja |
+| Pembelian stok | ✅ | ❌ |
 | Pengeluaran | ✅ | ❌ |
 | Hutang supplier | ✅ | ❌ |
 | Pengaturan | ✅ | ❌ |
@@ -88,9 +102,9 @@ Menu **Laporan**:
 
 1. Simpan nota **sebelum** pelanggan pergi; jangan menunda ke akhir hari.
 2. Setiap uang masuk—termasuk DP—harus dicatat, bukan hanya pelunasan.
-3. Catat pengeluaran di hari yang sama.
+3. Catat pengeluaran di hari yang sama, tetapi **jangan catat pembelian stok sebagai pengeluaran**—gunakan menu Pembelian.
 4. Lakukan pengecekan stok fisik minimal seminggu sekali; bandingkan dengan menu Stok.
-5. Jika salah input, jangan menghapus database. Batalkan nota (dengan refund bila perlu) lalu buat nota baru yang benar.
+5. Jika salah input, jangan menghapus database. Batalkan nota (dengan refund bila perlu) atau gunakan **Koreksi** pada pembayaran/pengeluaran, lalu buat catatan baru yang benar.
 6. Aktifkan backup otomatis dari provider PostgreSQL dan uji restore secara berkala (lihat DEPLOYMENT).
 
 ## Pertanyaan umum
@@ -99,7 +113,13 @@ Menu **Laporan**:
 Tidak. Omset adalah nilai nota. Uang di kas adalah **kas diterima** (termasuk pelunasan piutang lama dan DP). Keduanya ditampilkan terpisah.
 
 **Kenapa laba bisa negatif?**
-Jika biaya bulan berjalan lebih besar dari laba kotor. Ini bisa normal di awal bulan ketika gaji/sewa dibayar lebih dulu. Periksa rincian biaya.
+Jika biaya bulan berjalan lebih besar dari laba kotor. Ini bisa normal di awal bulan ketika gaji/sewa dibayar lebih dulu. Periksa rincian biaya. Pastikan pembelian stok tidak dicatat ganda sebagai pengeluaran.
+
+**Saya beli stok tunai, kenapa tidak muncul di menu Pengeluaran?**
+Karena pembelian stok bukan biaya operasional. Uang berubah menjadi persediaan barang, dan kas keluarnya tercatat sebagai pembayaran supplier di **Laporan Arus Kas**. Biaya baru muncul sebagai HPP saat barang terjual. Mencatatnya lagi di Pengeluaran akan membuat laba dan kas terhitung dua kali.
+
+**Kenapa laba berbeda dengan uang di rekening?**
+Laba dihitung dari nota yang dibuat, termasuk yang belum dibayar pelanggan. Kas hanya berubah saat uang benar-benar diterima atau dibayarkan. Selain itu, pembelian stok mengubah kas menjadi persediaan tanpa mengurangi laba.
 
 **Apakah data tersimpan di ponsel?**
 Data tersimpan di database PostgreSQL bengkel (server/Vercel). Ponsel hanya menampilkan. PWA memungkinkan install, tetapi fitur tulis offline belum tersedia.

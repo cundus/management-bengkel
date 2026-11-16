@@ -323,7 +323,7 @@ async function main() {
     { day: 1, category: "Gaji", description: "Gaji mekanik & kasir", amount: 7800000 },
     { day: 2, category: "Sewa", description: "Sewa tempat bengkel bulanan", amount: 3500000 },
     { day: 3, category: "Listrik & Air", description: "Tagihan listrik dan air", amount: 640000 },
-    { day: 5, category: "Pembelian Stok", description: "Restock oli, filter, dan busi", amount: 2150000 },
+    { day: 5, category: "Perlengkapan", description: "Perlengkapan bengkel dan kebersihan", amount: 2150000 },
     { day: 8, category: "Operasional", description: "Kebersihan & konsumsi", amount: 350000 },
     { day: 12, category: "Peralatan", description: "Kunci shock dan WD-40", amount: 425000 },
   ];
@@ -343,7 +343,7 @@ async function main() {
   const currentExpenses = [
     { offset: -7, category: "Listrik & Air", description: "Token listrik & air bengkel", amount: 640000 },
     { offset: -4, category: "Operasional", description: "Konsumsi tim dan kebersihan", amount: 350000 },
-    { offset: -2, category: "Pembelian Stok", description: "Restock cepat oli dan filter", amount: 410000 },
+    { offset: -2, category: "Perlengkapan", description: "Perlengkapan cepat bengkel", amount: 410000 },
   ];
   for (const expense of currentExpenses) {
     const date = addDaysISO(today, expense.offset);

@@ -1,11 +1,13 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireOwner } from "@/lib/auth";
 import { parseVoidMaxDays } from "@/lib/calculations";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS, type PaymentMethod } from "@/lib/constants";
 import { isValidISODate, parseDateOnly, todayISO } from "@/lib/dates";
 import { prisma } from "@/lib/db";
+import { formatRupiah } from "@/lib/format";
 import type { ActionState } from "@/lib/action-state";
 
 function rupiah(value: FormDataEntryValue | null): number {
@@ -18,6 +20,23 @@ function text(value: FormDataEntryValue | null, max = 300): string {
 
 function isMethod(value: string): value is PaymentMethod {
   return (PAYMENT_METHODS as readonly string[]).includes(value);
+}
+
+/**
+ * Pengeluaran dengan tanggal dan nominal yang hampir sama dengan pembelian stok
+ * biasanya adalah duplikasi: kas sudah tercatat lewat pembayaran supplier.
+ * Kembalikan pembelian terdekat agar UI bisa meminta konfirmasi.
+ */
+async function findDuplicatePurchase(expenseDate: string, amount: number) {
+  const purchases = await prisma.purchase.findMany({
+    where: { businessDate: parseDateOnly(expenseDate) },
+    select: { id: true, total: true, supplier: { select: { name: true } } },
+    orderBy: { id: "desc" },
+  });
+  return purchases
+    .map((purchase) => ({ ...purchase, distance: Math.abs(purchase.total - amount) }))
+    .filter((purchase) => purchase.distance <= Math.max(5_000, Math.round(purchase.total * 0.01)))
+    .sort((a, b) => a.distance - b.distance)[0] ?? null;
 }
 
 export async function createExpenseAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -37,6 +56,21 @@ export async function createExpenseAction(_prev: ActionState, formData: FormData
     return { ok: false, message: "Periksa data pengeluaran.", fieldErrors };
   }
 
+  const duplicate = await findDuplicatePurchase(expenseDate, amount);
+  if (duplicate && formData.get("confirmDuplicate") !== "1") {
+    const label = `PB-${String(duplicate.id).padStart(5, "0")}`;
+    return {
+      ok: false,
+      message: `Ada pembelian ${label} dari ${duplicate.supplier.name} senilai ${formatRupiah(duplicate.total)} pada tanggal ini. Jika ini pembelian stok yang sama, jangan catat sebagai pengeluaran: kas dan stok sudah tercatat. Centang konfirmasi jika ini biaya lain.`,
+      warning: {
+        kind: "duplikat-pembelian",
+        purchaseId: duplicate.id,
+        supplierName: duplicate.supplier.name,
+        total: duplicate.total,
+      },
+    };
+  }
+
   await prisma.expense.create({
     data: {
       expenseDate: parseDateOnly(expenseDate),
@@ -51,6 +85,50 @@ export async function createExpenseAction(_prev: ActionState, formData: FormData
   revalidatePath("/laporan");
   revalidatePath("/");
   return { ok: true, message: "Pengeluaran berhasil dicatat." };
+}
+
+// Pemilik membalik pengeluaran yang salah input. Pengeluaran asli tetap tercatat
+// dan entri koreksi bernominal negatif mengurangi total pada tanggal koreksi.
+export async function reverseExpenseAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const user = await requireOwner();
+  const expenseId = Number(formData.get("expenseId"));
+  const reason = text(formData.get("reason"));
+  if (!Number.isInteger(expenseId) || expenseId <= 0) return { ok: false, message: "Pengeluaran tidak valid." };
+  if (reason.length < 3) return { ok: false, message: "Alasan koreksi wajib diisi minimal 3 karakter." };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM expenses WHERE id = ${expenseId} FOR UPDATE`;
+      const expense = await tx.expense.findUnique({
+        where: { id: expenseId },
+        select: { id: true, category: true, amount: true, reversesExpenseId: true, reversal: { select: { id: true } } },
+      });
+      if (!expense) throw new Error("Pengeluaran tidak ditemukan.");
+      if (expense.reversesExpenseId !== null) throw new Error("Entri koreksi tidak bisa dibalik lagi.");
+      if (expense.reversal) throw new Error("Pengeluaran ini sudah dikoreksi.");
+
+      await tx.expense.create({
+        data: {
+          expenseDate: parseDateOnly(todayISO()),
+          category: expense.category,
+          description: `Koreksi pengeluaran #${expense.id}: ${reason}`.slice(0, 300),
+          amount: -expense.amount,
+          createdById: user.id,
+          reversesExpenseId: expense.id,
+        },
+      });
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { ok: false, message: "Pengeluaran ini sudah dikoreksi. Muat ulang halaman." };
+    }
+    return { ok: false, message: error instanceof Error ? error.message : "Gagal mengoreksi pengeluaran." };
+  }
+
+  revalidatePath("/pengeluaran");
+  revalidatePath("/laporan", "layout");
+  revalidatePath("/");
+  return { ok: true, message: "Pengeluaran dibalik. Total pengeluaran dan laba sudah disesuaikan." };
 }
 
 export async function createSupplierAction(_prev: ActionState, formData: FormData): Promise<ActionState> {

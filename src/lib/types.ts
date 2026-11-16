@@ -155,6 +155,8 @@ export type Expense = {
   amount: number;
   createdByName: string;
   createdAt: string;
+  reversesExpenseId: number | null;
+  reversed: boolean;
 };
 
 export type Supplier = {

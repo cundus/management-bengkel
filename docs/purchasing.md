@@ -10,9 +10,13 @@ Satu penyimpanan membuat pembelian, batch stok untuk setiap baris, satu tagihan 
 
 Pembayaran berikutnya dari detail pembelian maupun Hutang Supplier memakai tagihan yang sama. Pembayaran mengurangi kas melalui pencatatan pembayaran hutang yang sudah digunakan laporan. Pembelian tidak membuat pengeluaran operasional baru; HPP baru dihitung saat barang terjual sesuai FIFO. Riwayat batch, pembelian, dan tagihan saling memiliki tautan.
 
+Setelah disimpan, detail pembelian menampilkan **Kas keluar**, **Persediaan bertambah**, dan **Sisa hutang** agar terlihat bahwa uang berubah menjadi aset. Pembelian tunai juga tidak perlu dicatat ulang di menu Pengeluaran. Jika terlanjur tercatat ganda, pengeluaran dapat dikoreksi dengan entri reversal di halaman Pengeluaran; data asli tetap tersimpan.
+
 Tagihan lama dipertahankan. Tombol **Tagihan lain** tetap tersedia untuk tagihan tanpa penerimaan stok; jangan mencatat ulang pembelian dari tombol tersebut. Penerimaan stok tanpa tagihan tetap tersedia di detail barang untuk saldo awal/penambahan di luar pembelian.
 
 Versi ini mencatat penerimaan lengkap sekali simpan, tanpa PO, penerimaan parsial, retur pembelian, atau pengubahan pembelian yang sudah diterima.
+
+> **Proposed enhancement:** usulan void/koreksi pembelian, perbaikan idempotensi form, akurasi kas supplier, dan penyempurnaan input dicatat di [`PROPOSED-ENHANCEMENTS.md`](PROPOSED-ENHANCEMENTS.md).
 
 ## Migrasi dan rollback
 

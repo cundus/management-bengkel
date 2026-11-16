@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   Banknote,
   CalendarDays,
@@ -12,9 +13,10 @@ import { listExpenses } from "@/lib/queries/finance";
 import { monthOptions } from "@/lib/queries/reports";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ExpenseDialog } from "@/components/finance/expense-dialog";
+import { ExpenseDialog, ExpenseReversalDialog } from "@/components/finance/expense-dialog";
 import { currentMonthISO, formatDateID, isValidMonth, monthLabel } from "@/lib/dates";
 import { formatCompactRupiah, formatRupiah, percent } from "@/lib/format";
+import { cn } from "@/lib/cn";
 
 export const metadata: Metadata = { title: "Pengeluaran" };
 
@@ -64,6 +66,17 @@ export default async function ExpensesPage({
           </>
         }
       />
+
+      <div className="mb-4 flex items-start gap-2 rounded-xl border border-line bg-surface/70 px-4 py-3 text-[10.5px] leading-relaxed text-muted">
+        <ReceiptText size={14} className="mt-0.5 shrink-0 text-pine" />
+        <p>
+          Membeli sparepart atau stok? Catat lewat{" "}
+          <Link href="/pembelian/baru" className="font-extrabold text-pine underline">
+            menu Pembelian
+          </Link>{" "}
+          agar kas keluar, stok, dan hutang supplier tercatat sekaligus. Pembelian stok bukan pengeluaran operasional.
+        </p>
+      </div>
 
       <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-4">
         <div className="card p-4 sm:p-5">
@@ -133,16 +146,43 @@ export default async function ExpensesPage({
                     </thead>
                     <tbody>
                       {data.rows.map((expense) => (
-                        <tr key={expense.id}>
+                        <tr key={expense.id} data-expense-id={expense.id}>
                           <td>
                             <div className="text-[12px] font-bold text-ink">{expense.description}</div>
                             <div className="mt-0.5 text-[9px] font-medium text-faint">oleh {expense.createdByName}</div>
+                            {expense.reversesExpenseId ? (
+                              <span className="mt-1 inline-flex rounded-md bg-[#f2eee6] px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase tracking-wide text-muted">
+                                Koreksi
+                              </span>
+                            ) : expense.reversed ? (
+                              <span className="mt-1 inline-flex rounded-md bg-[#f2eee6] px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase tracking-wide text-muted">
+                                Dikoreksi
+                              </span>
+                            ) : (
+                              <div className="mt-1">
+                                <ExpenseReversalDialog
+                                  expenseId={expense.id}
+                                  description={expense.description}
+                                  category={expense.category}
+                                  amount={expense.amount}
+                                  expenseDate={expense.expenseDate}
+                                />
+                              </div>
+                            )}
                           </td>
                           <td>
                             <span className="badge-neutral">{expense.category}</span>
                           </td>
                           <td className="text-[11px] font-semibold text-muted">{formatDateID(expense.expenseDate)}</td>
-                          <td className="text-right text-[12px] font-extrabold text-ink tabular">{formatRupiah(expense.amount)}</td>
+                          <td
+                            className={cn(
+                              "text-right text-[12px] font-extrabold tabular",
+                              expense.amount < 0 ? "text-danger" : "text-ink",
+                              expense.reversed && "text-faint line-through",
+                            )}
+                          >
+                            {formatRupiah(expense.amount)}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -151,7 +191,7 @@ export default async function ExpensesPage({
               </div>
               <div className="divide-y divide-line/70 sm:hidden">
                 {data.rows.map((expense) => (
-                  <div key={expense.id} className="flex items-center gap-3 p-4">
+                  <div key={expense.id} data-expense-id={expense.id} className="flex items-center gap-3 p-4">
                     <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-warning-soft text-warning">
                       <Banknote size={15} />
                     </div>
@@ -160,15 +200,43 @@ export default async function ExpensesPage({
                       <div className="mt-0.5 text-[9px] font-medium text-faint">
                         {expense.category} · {formatDateID(expense.expenseDate)}
                       </div>
+                      {expense.reversesExpenseId ? (
+                        <span className="mt-1 inline-flex rounded-md bg-[#f2eee6] px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase tracking-wide text-muted">
+                          Koreksi
+                        </span>
+                      ) : expense.reversed ? (
+                        <span className="mt-1 inline-flex rounded-md bg-[#f2eee6] px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase tracking-wide text-muted">
+                          Dikoreksi
+                        </span>
+                      ) : (
+                        <div className="mt-1">
+                          <ExpenseReversalDialog
+                            expenseId={expense.id}
+                            description={expense.description}
+                            category={expense.category}
+                            amount={expense.amount}
+                            expenseDate={expense.expenseDate}
+                          />
+                        </div>
+                      )}
                     </div>
-                    <div className="shrink-0 text-[11.5px] font-extrabold text-ink tabular">{formatRupiah(expense.amount)}</div>
+                    <div
+                      className={cn(
+                        "shrink-0 text-[11.5px] font-extrabold tabular",
+                        expense.amount < 0 ? "text-danger" : "text-ink",
+                        expense.reversed && "text-faint line-through",
+                      )}
+                    >
+                      {formatRupiah(expense.amount)}
+                    </div>
                   </div>
                 ))}
               </div>
             </>
           )}
           <div className="border-t border-line px-4 py-3 text-[10px] font-medium text-faint sm:px-5">
-            Pengeluaran dikelola oleh pemilik bengkel.
+            Pengeluaran dikelola oleh pemilik bengkel. Entri <strong>koreksi</strong> bernominal negatif ikut
+            mengurangi total, sehingga angka dapat dikembalikan tanpa menghapus riwayat.
           </div>
         </div>
 

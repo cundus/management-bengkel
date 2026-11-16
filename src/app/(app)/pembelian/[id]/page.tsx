@@ -10,9 +10,13 @@ import { PayablePaymentDialog, ReversePayablePaymentDialog } from "@/components/
 
 export const metadata: Metadata = { title: "Detail pembelian" };
 
-export default async function PurchaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PurchaseDetailPage({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ baru?: string }>;
+}) {
   await requireOwner();
   const id = Number((await params).id);
+  const showCreated = (await searchParams).baru === "1";
   if (!Number.isInteger(id) || id <= 0) notFound();
   const purchase = await prisma.purchase.findUnique({ where: { id }, include: {
     supplier: true, createdBy: true, payable: { include: { payments: { include: { reversal: { select: { id: true } } }, orderBy: { paidAt: "desc" } } } },
@@ -21,13 +25,42 @@ export default async function PurchaseDetailPage({ params }: { params: Promise<{
   if (!purchase) notFound();
   const paid = purchase.payable.payments.reduce((sum, payment) => sum + payment.amount, 0);
   const remaining = Math.max(0, purchase.total - paid);
+  const stockUnits = purchase.batches.reduce((sum, batch) => sum + batch.quantity, 0);
+  const stockValue = purchase.batches.reduce((sum, batch) => sum + batch.quantity * batch.unitCost, 0);
   return <div className="space-y-5">
     <PageHeader eyebrow="Barang diterima" title={`PB-${String(purchase.id).padStart(5, "0")}`} backHref="/pembelian"
       description={`${purchase.supplier.name} · ${formatDateID(dateOnlyToISO(purchase.businessDate))}${purchase.referenceNo ? ` · Nota ${purchase.referenceNo}` : ""}`}
       actions={<Link href={`/hutang?semua=1#tagihan-${purchase.payableId}`} className="btn-secondary">Lihat tagihan supplier</Link>} />
-    <div className="grid gap-3 sm:grid-cols-3">
-      {[['Total pembelian', purchase.total], ['Sudah dibayar', paid], ['Sisa hutang', remaining]].map(([label, amount]) => <div key={label} className="card p-5"><p className="text-xs text-muted">{label}</p><p className="mt-2 font-display text-xl font-extrabold">{formatRupiah(Number(amount))}</p></div>)}
+
+    {showCreated && (
+      <div role="status" className="rounded-2xl border border-success/25 bg-success-soft p-5">
+        <p className="text-sm font-extrabold text-success">Pembelian tersimpan.</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-success/80">
+          {paid > 0
+            ? `Kas keluar ${formatRupiah(paid)} sudah tercatat otomatis di Laporan Arus Kas.`
+            : "Belum ada kas keluar; tagihan masuk ke Hutang Supplier."}{" "}
+          Persediaan bertambah {formatNumber(stockUnits)} unit dari {purchase.batches.length} batch. Tidak perlu
+          mencatat pengeluaran lagi.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link href="/laporan/arus-kas" className="btn-secondary">Buka laporan arus kas</Link>
+          <Link href="/pembelian/baru" className="btn-ghost">Catat pembelian lain</Link>
+        </div>
+      </div>
+    )}
+
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {[
+        ["Total pembelian", purchase.total],
+        ["Kas keluar", paid],
+        ["Persediaan bertambah", stockValue],
+        ["Sisa hutang", remaining],
+      ].map(([label, amount]) => <div key={label} className="card p-5"><p className="text-xs text-muted">{label}</p><p className="mt-2 font-display text-xl font-extrabold">{formatRupiah(Number(amount))}</p></div>)}
     </div>
+    <p className="text-xs leading-relaxed text-muted">
+      Pembelian stok adalah perpindahan kas menjadi persediaan, bukan pengeluaran operasional. Kas keluar sudah tercatat
+      lewat pembayaran supplier; jangan catat ulang di menu Pengeluaran.
+    </p>
     <div className="card overflow-hidden"><div className="p-5"><h2 className="font-display text-lg font-extrabold">Barang & batch</h2></div>
       <div className="table-wrap"><table className="data-table"><thead><tr><th>Barang</th><th>Batch / lot</th><th>Jumlah masuk</th><th>Sisa batch</th><th>Modal / unit</th><th>Subtotal</th></tr></thead>
         <tbody>{purchase.batches.map((batch) => <tr key={batch.id}>

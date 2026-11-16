@@ -20,11 +20,14 @@ test("pembelian banyak barang terhubung ke batch dan tagihan hingga lunas", asyn
   await page.getByLabel("Cara pembayaran").selectOption("sebagian");
   await page.getByLabel("Dibayar sekarang (Rp)").fill("30000");
   await page.getByLabel("Jatuh tempo", { exact: true }).fill(todayISO());
-  await page.getByRole("button", { name: "Simpan & terima barang" }).click();
-  await page.waitForURL(/\/pembelian\/\d+$/);
+  await page.getByRole("button", { name: "Simpan, terima barang & catat kas" }).click();
+  await page.waitForURL(/\/pembelian\/\d+\?baru=1$/);
   const detailUrl = page.url();
-  await expect(page.getByText("Rp 80.000", { exact: true })).toBeVisible();
-  await expect(page.getByText("Rp 50.000", { exact: true })).toBeVisible();
+  await expect(page.getByText("Pembelian tersimpan.")).toBeVisible();
+  await expect(page.getByText("Kas keluar Rp 30.000 sudah tercatat otomatis di Laporan Arus Kas.")).toBeVisible();
+  await expect(page.getByText("Tidak perlu mencatat pengeluaran lagi.")).toBeVisible();
+  await expect(page.getByText("Rp 80.000", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Rp 50.000", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("cell", { name: `LOT-A-${suffix}`, exact: true })).toBeVisible();
   await expect(page.getByRole("cell", { name: `LOT-B-${suffix}`, exact: true })).toBeVisible();
 

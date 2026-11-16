@@ -7,6 +7,7 @@ import { requireOwner } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PAYMENT_METHODS } from "@/lib/constants";
 import { isValidISODate, parseDateOnly, todayISO } from "@/lib/dates";
+import { formatRupiah } from "@/lib/format";
 import { receiveStock } from "@/lib/stock";
 
 const integer = z.number().int().min(0).max(2147483647);
@@ -19,6 +20,7 @@ const purchaseSchema = z.object({
   notes: z.string().trim().max(500),
   payNow: integer,
   method: z.enum(PAYMENT_METHODS),
+  confirmDuplicate: z.boolean().optional(),
   lines: z.array(z.object({
     itemId: integer.positive(),
     code: z.string().trim().min(1).max(80).transform((value) => value.toUpperCase()),
@@ -27,7 +29,31 @@ const purchaseSchema = z.object({
   })).min(1).max(100),
 });
 
-export type PurchaseResult = { ok: true; id: number } | { ok: false; message: string };
+export type PurchaseWarning = {
+  kind: "duplikat-pengeluaran";
+  expenseId: number;
+  description: string;
+  amount: number;
+};
+
+export type PurchaseResult = { ok: true; id: number } | { ok: false; message: string; warning?: PurchaseWarning };
+
+/**
+ * Pengeluaran dengan tanggal dan nominal yang hampir sama dengan pembelian biasanya
+ * adalah duplikasi: pemilik mencatat belanja stok sebagai pengeluaran sebelum
+ * memakai menu Pembelian. Minta konfirmasi sebelum menulis stok/hutang.
+ */
+async function findDuplicateExpense(businessDate: string, total: number) {
+  const expenses = await prisma.expense.findMany({
+    where: { expenseDate: parseDateOnly(businessDate), amount: { gt: 0 } },
+    select: { id: true, description: true, amount: true },
+    orderBy: { id: "desc" },
+  });
+  return expenses
+    .map((expense) => ({ ...expense, distance: Math.abs(expense.amount - total) }))
+    .filter((expense) => expense.distance <= Math.max(5_000, Math.round(expense.amount * 0.01)))
+    .sort((a, b) => a.distance - b.distance)[0] ?? null;
+}
 
 export async function createPurchaseAction(input: unknown): Promise<PurchaseResult> {
   const user = await requireOwner();
@@ -43,6 +69,21 @@ export async function createPurchaseAction(input: unknown): Promise<PurchaseResu
   }
   if (new Set(data.lines.map((line) => `${line.itemId}:${line.code}`)).size !== data.lines.length) {
     return { ok: false, message: "Kode batch untuk barang yang sama tidak boleh berulang dalam pembelian." };
+  }
+  if (!data.confirmDuplicate) {
+    const duplicate = await findDuplicateExpense(data.businessDate, total);
+    if (duplicate) {
+      return {
+        ok: false,
+        message: `Ada pengeluaran #${duplicate.id} "${duplicate.description}" senilai ${formatRupiah(duplicate.amount)} pada tanggal ini. Jika pengeluaran itu untuk pembelian stok ini, koreksi dulu pengeluaran tersebut agar kas tidak tercatat dua kali. Centang konfirmasi jika ini transaksi berbeda.`,
+        warning: {
+          kind: "duplikat-pengeluaran",
+          expenseId: duplicate.id,
+          description: duplicate.description,
+          amount: duplicate.amount,
+        },
+      };
+    }
   }
 
   let id: number;

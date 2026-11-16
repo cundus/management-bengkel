@@ -25,7 +25,7 @@ export const EXPENSE_CATEGORIES = [
   "Sewa",
   "Listrik & Air",
   "Peralatan",
-  "Pembelian Stok",
+  "Perlengkapan",
   "Operasional",
   "Lainnya",
 ] as const;

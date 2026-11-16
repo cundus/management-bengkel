@@ -94,6 +94,8 @@ Laporan:
 
 Prioritas dinilai berdasarkan **dampak operasional ÷ effort**.
 
+> **Proposed enhancement:** hasil review alur input pembelian dan arus kas (void pembelian, idempotensi form, akurasi kas supplier, kebijakan modal, UX input) dicatat di [`PROPOSED-ENHANCEMENTS.md`](PROPOSED-ENHANCEMENTS.md). **Paket B** (pencegahan duplikasi pembelian vs pengeluaran, reversal pengeluaran, perbaikan UX pembelian) sudah diimplementasikan 17 Nov 2026; sisanya belum masuk prioritas rilis sampai disetujui.
+
 ### P1 — sebelum dipakai bengkel sungguhan
 
 | # | Inisiatif | Nilai | Effort | Acceptance criteria |
